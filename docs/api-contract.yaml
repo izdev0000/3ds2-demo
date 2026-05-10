@@ -271,13 +271,26 @@ components:
         payment_method_id:
           type: string
           description: |
-            Stripe Elements で生成した PaymentMethod ID（`pm_…`）。
+            Stripe Elements 等で生成した PaymentMethod ID（`pm_…`）。
             テスト時は `pm_card_visa` 等のテスト用エイリアスも受け付ける。
           example: pm_card_visa
+        flow:
+          type: string
+          enum: [client_sdk, server_redirect]
+          default: client_sdk
+          description: |
+            confirmation 経路の指定。詳細は `docs/design/confirmation-flow.md` 参照。
+            - `client_sdk`: frontend SDK が iframe で 3DS2 challenge を扱う
+              (Stripe デフォルト)。`return_url` は任意。
+            - `server_redirect`: backend が confirm 後、redirect URL を返却して
+              issuer ページへ画面遷移する (国内 PSP で主流のパターン)。
+              `return_url` 必須。
         return_url:
           type: string
           format: uri
-          description: redirect 経路の 3DS2 challenge 後に遷移する URL
+          description: |
+            3DS2 challenge 完了後の戻り URL。`flow=server_redirect` の場合は必須、
+            `flow=client_sdk` の場合は任意。
 
     PaymentResponse:
       type: object

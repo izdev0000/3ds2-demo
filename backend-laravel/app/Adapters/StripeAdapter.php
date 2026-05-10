@@ -7,10 +7,12 @@ namespace App\Adapters;
 use App\DTO\ConfirmPaymentRequest;
 use App\DTO\CreatePaymentRequest;
 use App\DTO\PaymentResponse;
+use App\Enums\ConfirmationFlow;
 use App\Enums\PaymentStatus;
 use App\Models\Transaction;
 use App\Support\IdGenerator;
 use DateTimeImmutable;
+use InvalidArgumentException;
 use RuntimeException;
 use Stripe\Exception\SignatureVerificationException;
 use Stripe\StripeClient;
@@ -73,7 +75,7 @@ final class StripeAdapter implements PaymentAdapterInterface
         return $this->toResponse($transaction);
     }
 
-    public function confirmPayment(string $id, ConfirmPaymentRequest $request): PaymentResponse
+    public function confirmPayment(string $id, ConfirmPaymentRequest $request, ConfirmationFlow $flow): PaymentResponse
     {
         $transaction = Transaction::query()->findOrFail($id);
 
@@ -84,10 +86,22 @@ final class StripeAdapter implements PaymentAdapterInterface
             ));
         }
 
+        // SERVER_REDIRECT は return_url 必須。CLIENT_SDK は任意で渡してよい。
+        if ($flow->requiresReturnUrl() && $request->returnUrl === null) {
+            throw new InvalidArgumentException(sprintf(
+                'ConfirmationFlow::%s requires a return_url.',
+                $flow->name,
+            ));
+        }
+
         $params = ['payment_method' => $request->paymentMethodId];
         if ($request->returnUrl !== null) {
             $params['return_url'] = $request->returnUrl;
         }
+
+        // 使った flow を Transaction の metadata にも記録 (監査・障害調査用)。
+        $metadata = $transaction->metadata ?? [];
+        $metadata['confirmation_flow'] = $flow->value;
 
         // Stripe で confirm。3DS2 が必要なら status='requires_action' + next_action が返る。
         $intent = $this->stripe->paymentIntents->confirm(
@@ -97,6 +111,7 @@ final class StripeAdapter implements PaymentAdapterInterface
 
         $transaction->status = PaymentStatus::from($intent->status);
         $transaction->next_action = $intent->next_action?->toArray();
+        $transaction->metadata = $metadata;
         $transaction->save();
 
         return $this->toResponse($transaction);

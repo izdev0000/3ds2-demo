@@ -7,6 +7,7 @@ namespace App\Adapters;
 use App\DTO\ConfirmPaymentRequest;
 use App\DTO\CreatePaymentRequest;
 use App\DTO\PaymentResponse;
+use App\Enums\ConfirmationFlow;
 
 /**
  * PSP 抽象化レイヤ。
@@ -30,8 +31,15 @@ interface PaymentAdapterInterface
      * PaymentIntent を confirm する。3DS2 challenge が必要な場合は
      * PaymentResponse の status が REQUIRES_ACTION になり、nextAction
      * に challenge 詳細が入る。
+     *
+     * $flow で confirmation 経路を指定する:
+     * - CLIENT_SDK: frontend SDK が iframe で challenge を扱う想定。return_url は任意。
+     * - SERVER_REDIRECT: backend が return_url を Stripe に渡し、frontend は
+     *   返却された redirect URL へ画面遷移する想定。return_url は必須。
+     *
+     * 設計詳細は docs/design/confirmation-flow.md 参照。
      */
-    public function confirmPayment(string $id, ConfirmPaymentRequest $request): PaymentResponse;
+    public function confirmPayment(string $id, ConfirmPaymentRequest $request, ConfirmationFlow $flow): PaymentResponse;
 
     /**
      * PaymentIntent の現在状態を取得する。

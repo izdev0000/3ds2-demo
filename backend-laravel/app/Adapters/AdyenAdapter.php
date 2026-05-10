@@ -7,6 +7,7 @@ namespace App\Adapters;
 use App\DTO\ConfirmPaymentRequest;
 use App\DTO\CreatePaymentRequest;
 use App\DTO\PaymentResponse;
+use App\Enums\ConfirmationFlow;
 use LogicException;
 
 /**
@@ -23,7 +24,7 @@ final class AdyenAdapter implements PaymentAdapterInterface
         throw $this->stubException(__FUNCTION__);
     }
 
-    public function confirmPayment(string $id, ConfirmPaymentRequest $request): PaymentResponse
+    public function confirmPayment(string $id, ConfirmPaymentRequest $request, ConfirmationFlow $flow): PaymentResponse
     {
         throw $this->stubException(__FUNCTION__);
     }

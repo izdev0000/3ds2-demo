@@ -13,6 +13,7 @@ use App\Models\Transaction;
 use App\Models\WebhookEvent;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 /**
  * Payment endpoints。
@@ -56,11 +57,13 @@ final class PaymentController extends Controller
     {
         $validated = $request->validate([
             'payment_method_id' => ['required', 'string'],
-            'return_url' => ['nullable', 'url'],
+            'flow' => ['nullable', 'string', Rule::in(['client_sdk', 'server_redirect'])],
+            // server_redirect は issuer 復帰用に return_url 必須
+            'return_url' => ['required_if:flow,server_redirect', 'nullable', 'url'],
         ]);
 
         $dto = ConfirmPaymentRequest::fromArray($validated);
-        $response = $this->adapter->confirmPayment($id, $dto);
+        $response = $this->adapter->confirmPayment($id, $dto, $dto->flow);
 
         return response()->json($response->toArray());
     }
