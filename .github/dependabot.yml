@@ -1,0 +1,56 @@
+# Dependabot 設定: 依存パッケージの脆弱性 / バージョン更新を週次で自動 PR
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+
+updates:
+  # backend-laravel の composer 依存
+  - package-ecosystem: composer
+    directory: /backend-laravel
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - backend
+
+  # frontend の npm 依存
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - frontend
+
+  # GitHub Actions 自体のバージョン更新 (.github/workflows/*.yml の actions/* 等)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencies
+      - ci
+
+  # Docker base image の更新 (backend / frontend それぞれの Dockerfile)
+  - package-ecosystem: docker
+    directory: /docker/backend-laravel
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencies
+      - docker
+
+  - package-ecosystem: docker
+    directory: /docker/frontend
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencies
+      - docker
