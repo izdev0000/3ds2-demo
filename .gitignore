@@ -65,4 +65,4 @@ docker-compose.override.yaml
 FLOW.md
 NOTES.md
 SCRATCH.md
-HANDOUT.md
+HANDOUT*.md
