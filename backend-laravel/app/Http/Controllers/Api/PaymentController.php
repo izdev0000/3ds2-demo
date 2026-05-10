@@ -7,7 +7,10 @@ namespace App\Http\Controllers\Api;
 use App\Adapters\PaymentAdapterInterface;
 use App\DTO\ConfirmPaymentRequest;
 use App\DTO\CreatePaymentRequest;
+use App\DTO\PaymentEventResponse;
 use App\Http\Controllers\Controller;
+use App\Models\Transaction;
+use App\Models\WebhookEvent;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,7 +23,7 @@ use Illuminate\Http\Request;
  *   - create:   実装済み (Y3-3)
  *   - show:     実装済み (Y3-4)
  *   - confirm:  実装済み (Y3-4)
- *   - events:   未実装 (Y3-7)
+ *   - events:   実装済み (Y3-7)
  */
 final class PaymentController extends Controller
 {
@@ -65,14 +68,16 @@ final class PaymentController extends Controller
 
     public function events(string $id): JsonResponse
     {
-        return $this->notImplemented(__FUNCTION__);
-    }
+        // Transaction 不在は 404 で返したいので存在検査を先にする
+        Transaction::query()->findOrFail($id);
 
-    private function notImplemented(string $method): JsonResponse
-    {
-        return response()->json([
-            'code' => 'not_implemented',
-            'message' => sprintf('PaymentController::%s() is not implemented yet.', $method),
-        ], 501);
+        $events = WebhookEvent::query()
+            ->where('transaction_id', $id)
+            ->orderBy('received_at')
+            ->get()
+            ->map(fn (WebhookEvent $event) => PaymentEventResponse::fromModel($event)->toArray())
+            ->all();
+
+        return response()->json(['events' => $events]);
     }
 }
