@@ -67,7 +67,7 @@ final class StripeAdapter implements PaymentAdapterInterface
             'amount' => $request->amount,
             'currency' => $request->currency,
             'next_action' => $intent->next_action?->toArray(),
-            'metadata' => $intent->metadata?->toArray(),
+            'metadata' => $intent->metadata->toArray(),
         ]);
 
         return $this->toResponse($transaction);

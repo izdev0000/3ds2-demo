@@ -55,7 +55,7 @@ class Transaction extends Model
     }
 
     /**
-     * @return HasMany<WebhookEvent>
+     * @return HasMany<WebhookEvent, $this>
      */
     public function events(): HasMany
     {

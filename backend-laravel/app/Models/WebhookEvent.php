@@ -51,7 +51,7 @@ class WebhookEvent extends Model
     }
 
     /**
-     * @return BelongsTo<Transaction, WebhookEvent>
+     * @return BelongsTo<Transaction, $this>
      */
     public function transaction(): BelongsTo
     {
