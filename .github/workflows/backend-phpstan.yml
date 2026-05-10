@@ -1,0 +1,49 @@
+name: backend-phpstan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend-laravel/**'
+      - '.github/workflows/backend-phpstan.yml'
+  pull_request:
+    paths:
+      - 'backend-laravel/**'
+      - '.github/workflows/backend-phpstan.yml'
+
+jobs:
+  phpstan:
+    name: PHPStan / larastan (level 8)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend-laravel
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, intl, zip, pdo, pdo_mysql
+          coverage: none
+          tools: composer
+
+      - name: Get composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('backend-laravel/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install dependencies (no-scripts)
+        run: composer install --prefer-dist --no-progress --no-interaction --no-scripts
+
+      - name: Run PHPStan
+        run: ./vendor/bin/phpstan analyse --memory-limit=512M --no-progress
