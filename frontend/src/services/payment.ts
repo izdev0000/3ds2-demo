@@ -1,6 +1,5 @@
-// docs/api-contract.yaml で確定予定の暫定インターフェース。
-// backend (StripeAdapter) は PaymentIntent を作成し、client_secret を返す。
-// フロント側で stripe.confirmCardPayment / handleNextAction を明示的に呼ぶ。
+// docs/api-contract.yaml の PaymentResponse / ConfirmPaymentRequest を反映する
+// 暫定インターフェース。将来 openapi-typescript 等で型自動生成する想定。
 
 export type PaymentIntentStatus =
   | 'requires_payment_method'
@@ -11,15 +10,39 @@ export type PaymentIntentStatus =
   | 'canceled'
   | 'succeeded'
 
+export type ConfirmationFlow = 'client_sdk' | 'server_redirect'
+
 export interface CreatePaymentIntentRequest {
   amount: number
   currency: string
 }
 
+export interface NextAction {
+  type: 'use_stripe_sdk' | 'redirect_to_url'
+  redirect_to_url?: {
+    url: string
+    return_url?: string
+  }
+}
+
+// Backward-compat alias: 既存呼出が使う minimal subset 型
 export interface PaymentIntentResponse {
   id: string
   client_secret: string
   status: PaymentIntentStatus
+}
+
+// docs/api-contract.yaml の PaymentResponse 全フィールド
+export interface PaymentResponse extends PaymentIntentResponse {
+  amount: number
+  currency: string
+  next_action?: NextAction | null
+}
+
+export interface ConfirmPaymentRequest {
+  payment_method_id: string
+  return_url?: string
+  flow: ConfirmationFlow
 }
 
 const backendUrl = import.meta.env.VITE_BACKEND_ORIGIN
@@ -51,6 +74,18 @@ export function createPaymentIntent(
 }
 
 // challenge 完了後 / webhook 反映後の最新 status 取得用。
-export function getPaymentIntent(id: string): Promise<PaymentIntentResponse> {
-  return request<PaymentIntentResponse>(`/api/payments/${id}`)
+export function getPaymentIntent(id: string): Promise<PaymentResponse> {
+  return request<PaymentResponse>(`/api/payments/${id}`)
+}
+
+// server_redirect flow で backend が confirm + redirect URL を返す。
+// client_sdk flow でも一応呼べるが、現状 frontend は使わない。
+export function confirmPayment(
+  id: string,
+  body: ConfirmPaymentRequest,
+): Promise<PaymentResponse> {
+  return request<PaymentResponse>(`/api/payments/${id}/confirm`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
 }

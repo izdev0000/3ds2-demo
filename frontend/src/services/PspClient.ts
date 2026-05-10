@@ -43,6 +43,10 @@ export type ConfirmResult =
   | { kind: 'succeeded'; finalStatus: string }
   | { kind: 'failed'; message: string; finalStatus?: string }
 
+export interface CreatedPaymentMethod {
+  paymentMethodId: string
+}
+
 export interface PspClient {
   // PSP SDK の lazy 初期化。複数回呼ばれても 1 回しか load しない。
   init(): Promise<void>
@@ -54,5 +58,10 @@ export interface PspClient {
   ): Promise<MountedCardForm>
 
   // 与えられた client_secret で支払いを confirm し、必要なら 3DS2 challenge を実行。
+  // (client_sdk flow 専用)
   confirmAndChallenge(args: ConfirmAndChallengeArgs): Promise<ConfirmResult>
+
+  // server_redirect flow では backend に payment_method_id を渡す必要があるため、
+  // Elements の card から PaymentMethod ID を生成する (confirm はしない)。
+  createPaymentMethod(card: CardHandle): Promise<CreatedPaymentMethod>
 }

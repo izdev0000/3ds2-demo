@@ -5,8 +5,10 @@ import {
   type StripeElements,
 } from '@stripe/stripe-js'
 import type {
+  CardHandle,
   ConfirmAndChallengeArgs,
   ConfirmResult,
+  CreatedPaymentMethod,
   MountCardFormOptions,
   MountCardFormTargets,
   MountedCardForm,
@@ -59,6 +61,23 @@ export class StripePspClient implements PspClient {
         cardCvc.unmount()
       },
     }
+  }
+
+  async createPaymentMethod(card: CardHandle): Promise<CreatedPaymentMethod> {
+    if (!this.stripe) await this.init()
+    if (!this.stripe) throw new Error('Stripe 未初期化')
+    const cardElement = card as StripeCardNumberElement
+    const res = await this.stripe.createPaymentMethod({
+      type: 'card',
+      card: cardElement,
+    })
+    if (res.error) {
+      throw new Error(res.error.message ?? 'createPaymentMethod に失敗')
+    }
+    if (!res.paymentMethod) {
+      throw new Error('PaymentMethod が返却されませんでした')
+    }
+    return { paymentMethodId: res.paymentMethod.id }
   }
 
   async confirmAndChallenge(args: ConfirmAndChallengeArgs): Promise<ConfirmResult> {
