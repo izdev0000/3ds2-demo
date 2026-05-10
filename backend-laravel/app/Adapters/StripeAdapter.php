@@ -36,8 +36,7 @@ final class StripeAdapter implements PaymentAdapterInterface
     public function __construct(
         private readonly StripeClient $stripe,
         private readonly string $webhookSecret,
-    ) {
-    }
+    ) {}
 
     public function createPayment(CreatePaymentRequest $request): PaymentResponse
     {

@@ -47,7 +47,6 @@ interface PaymentAdapterInterface
      *
      * @param  string  $payload  raw リクエストボディ (Stripe は raw payload を必要とする)
      * @param  string  $signature  PSP 固有の署名ヘッダ値 (Stripe なら Stripe-Signature)
-     *
      * @return array<string, mixed> parse 済み event payload
      *
      * @throws \RuntimeException 検証失敗 / payload 不正時 (各 Adapter は固有例外でラップしてもよい)

@@ -40,8 +40,7 @@ final class WebhookController extends Controller
     public function __construct(
         private readonly PaymentAdapterInterface $adapter,
         private readonly StripeEventHandler $handler,
-    ) {
-    }
+    ) {}
 
     public function stripe(Request $request): JsonResponse|Response
     {

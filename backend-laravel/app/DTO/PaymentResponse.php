@@ -27,8 +27,7 @@ final readonly class PaymentResponse
         public ?array $nextAction,
         public DateTimeImmutable $createdAt,
         public DateTimeImmutable $updatedAt,
-    ) {
-    }
+    ) {}
 
     /**
      * api-contract.yaml の PaymentResponse スキーマ通りに JSON 変換する。

@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * Webhook 受信イベント (idempotency 検証 + 監査ログ)。
@@ -16,10 +17,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $event_type
  * @property string|null $transaction_id
  * @property array<string, mixed> $payload
- * @property \Illuminate\Support\Carbon $received_at
- * @property \Illuminate\Support\Carbon|null $processed_at
- * @property \Illuminate\Support\Carbon $created_at
- * @property \Illuminate\Support\Carbon $updated_at
+ * @property Carbon $received_at
+ * @property Carbon|null $processed_at
+ * @property Carbon $created_at
+ * @property Carbon $updated_at
  */
 class WebhookEvent extends Model
 {

@@ -15,8 +15,7 @@ final readonly class CreatePaymentRequest
         public int $amount,
         public string $currency,
         public ?string $returnUrl = null,
-    ) {
-    }
+    ) {}
 
     /**
      * @param  array<string, mixed>  $data

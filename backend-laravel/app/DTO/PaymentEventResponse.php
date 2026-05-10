@@ -21,8 +21,7 @@ final readonly class PaymentEventResponse
         public ?string $paymentIntentId,
         public DateTimeImmutable $receivedAt,
         public ?DateTimeImmutable $processedAt,
-    ) {
-    }
+    ) {}
 
     public static function fromModel(WebhookEvent $event): self
     {

@@ -19,7 +19,7 @@ final class StripeEventHandlerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->handler = new StripeEventHandler();
+        $this->handler = new StripeEventHandler;
     }
 
     public function test_payment_intent_succeeded_updates_status_to_succeeded(): void

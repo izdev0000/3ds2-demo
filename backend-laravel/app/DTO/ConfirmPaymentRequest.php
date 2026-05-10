@@ -14,8 +14,7 @@ final readonly class ConfirmPaymentRequest
     public function __construct(
         public string $paymentMethodId,
         public ?string $returnUrl = null,
-    ) {
-    }
+    ) {}
 
     /**
      * @param  array<string, mixed>  $data

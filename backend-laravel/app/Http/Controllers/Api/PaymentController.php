@@ -29,8 +29,7 @@ final class PaymentController extends Controller
 {
     public function __construct(
         private readonly PaymentAdapterInterface $adapter,
-    ) {
-    }
+    ) {}
 
     public function create(Request $request): JsonResponse
     {

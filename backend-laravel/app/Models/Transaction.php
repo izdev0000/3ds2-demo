@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Enums\PaymentStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 /**
  * Payment transaction (PaymentIntent の内部レコード)。
@@ -20,8 +21,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $currency
  * @property array<string, mixed>|null $next_action
  * @property array<string, mixed>|null $metadata
- * @property \Illuminate\Support\Carbon $created_at
- * @property \Illuminate\Support\Carbon $updated_at
+ * @property Carbon $created_at
+ * @property Carbon $updated_at
  */
 class Transaction extends Model
 {

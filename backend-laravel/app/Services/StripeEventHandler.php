@@ -21,7 +21,7 @@ use App\Models\Transaction;
 final class StripeEventHandler
 {
     /**
-     * @param  array<string, mixed>  $event Stripe Event (parse 済み)
+     * @param  array<string, mixed>  $event  Stripe Event (parse 済み)
      * @return string|null 更新した Transaction の内部 ID (該当なし or no-op の場合 null)
      */
     public function handle(array $event): ?string
