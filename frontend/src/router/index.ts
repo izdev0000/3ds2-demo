@@ -9,6 +9,12 @@ const router = createRouter({
       name: 'payment',
       component: PaymentPage,
     },
+    {
+      // server_redirect flow の戻り先 (Stripe issuer ページから return される)
+      path: '/payments/return',
+      name: 'payment-return',
+      component: () => import('@/views/PaymentReturn.vue'),
+    },
   ],
 })
 
