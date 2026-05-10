@@ -133,6 +133,33 @@ describe('PaymentPage 統合テスト', () => {
     ).toBeDefined()
   })
 
+  it('idle 中は busy overlay 非表示', async () => {
+    setupFakePsp()
+    const wrapper = await mountPage()
+    expect(wrapper.find('[data-testid="busy-overlay"]').exists()).toBe(false)
+  })
+
+  it('challenging 中は busy overlay が表示され、メッセージは「3DS2 認証中…」', async () => {
+    let resolveNext: (v: ConfirmResult) => void = () => {}
+    const pending = new Promise<ConfirmResult>((r) => {
+      resolveNext = r
+    })
+    setupFakePsp({ triggerChallenge: true, confirm: pending })
+    const wrapper = await mountPage()
+
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    const overlay = wrapper.find('[data-testid="busy-overlay"]')
+    expect(overlay.exists()).toBe(true)
+    expect(overlay.text()).toContain('3DS2 認証中')
+
+    // resolve して succeeded まで進めると overlay が消える
+    resolveNext({ kind: 'succeeded', finalStatus: 'succeeded' })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="busy-overlay"]').exists()).toBe(false)
+  })
+
   it('成功後に「最初に戻る」で PaymentForm に戻り、lock も解放される', async () => {
     setupFakePsp()
     const wrapper = await mountPage()

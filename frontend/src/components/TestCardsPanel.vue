@@ -88,7 +88,9 @@ async function execute(card: TestCard) {
 }
 
 const isBusy = (phase: string) =>
-  phase === 'preparing' || phase === 'challenging'
+  phase === 'preparing' ||
+  phase === 'challenging' ||
+  phase === 'redirecting'
 </script>
 
 <template>

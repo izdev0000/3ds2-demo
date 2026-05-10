@@ -13,6 +13,25 @@ const store = usePaymentStore()
 const isFormPhase = computed(
   () => store.phase === 'idle' || store.phase === 'preparing',
 )
+
+// 決済処理中は overlay で全操作を block する。
+// (タブ切替で in-flight 状態を破壊する race condition の防止が主目的)
+const isBusy = computed(() =>
+  ['preparing', 'challenging', 'redirecting'].includes(store.phase),
+)
+
+const busyMessage = computed(() => {
+  switch (store.phase) {
+    case 'preparing':
+      return '決済を準備中…'
+    case 'challenging':
+      return '3DS2 認証中…'
+    case 'redirecting':
+      return '認証ページへ遷移中…'
+    default:
+      return ''
+  }
+})
 </script>
 
 <template>
@@ -26,14 +45,27 @@ const isFormPhase = computed(
       <div class="primary">
         <PaymentForm v-if="isFormPhase" />
         <ChallengeView v-if="store.phase === 'challenging'" />
-        <p v-else-if="store.phase === 'redirecting'" class="redirecting">
-          認証ページへ遷移しています…
-        </p>
         <ResultView
           v-if="store.phase === 'succeeded' || store.phase === 'failed'"
         />
       </div>
       <TestCardsPanel v-if="isFormPhase" class="aside" />
+    </div>
+
+    <div
+      v-if="isBusy"
+      class="busy-overlay"
+      role="status"
+      aria-live="polite"
+      data-testid="busy-overlay"
+    >
+      <div class="busy-card">
+        <div class="spinner" aria-hidden="true"></div>
+        <p class="busy-message">{{ busyMessage }}</p>
+        <p v-if="store.paymentIntentId" class="busy-meta">
+          PaymentIntent: <code>{{ store.paymentIntentId }}</code>
+        </p>
+      </div>
     </div>
   </main>
 </template>
@@ -70,13 +102,6 @@ const isFormPhase = computed(
   flex-shrink: 0;
 }
 
-.redirecting {
-  padding: 1rem;
-  border: 1px dashed var(--color-border);
-  border-radius: 4px;
-  font-style: italic;
-}
-
 @media (max-width: 720px) {
   .layout {
     flex-direction: column;
@@ -85,5 +110,60 @@ const isFormPhase = computed(
   .aside {
     width: 100%;
   }
+}
+
+/* 決済中の全操作 block: pointer-events を捕捉、半透明背景で視覚的にも示す。
+   Stripe の 3DS2 challenge iframe は z-index 9999+ なので overlay より上に出る。 */
+.busy-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  cursor: wait;
+}
+
+.busy-card {
+  background: var(--color-background);
+  color: var(--color-text);
+  padding: 1.5rem 2rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 360px;
+  text-align: center;
+}
+
+.spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-text);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.busy-message {
+  margin: 0;
+  font-weight: 600;
+}
+
+.busy-meta {
+  margin: 0;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  font-family: monospace;
+  word-break: break-all;
 }
 </style>
