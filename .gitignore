@@ -60,3 +60,8 @@ docker-compose.override.yaml
 # Coverage / Testing
 /coverage/
 .nyc_output/
+
+# Local working docs (作業計画・進捗管理、公開しない)
+FLOW.md
+NOTES.md
+SCRATCH.md
