@@ -73,11 +73,17 @@ async function copy(card: TestCard) {
 
 async function execute(card: TestCard) {
   if (!card.alias) return
+  // 現在の flow を反映。server_redirect の時は returnUrl も付与。
   await store.start({
     amount: 100,
     currency: 'jpy',
     psp: stripePspClient,
     paymentMethodId: card.alias,
+    flow: store.currentFlow,
+    returnUrl:
+      store.currentFlow === 'server_redirect'
+        ? `${window.location.origin}/payments/return`
+        : undefined,
   })
 }
 

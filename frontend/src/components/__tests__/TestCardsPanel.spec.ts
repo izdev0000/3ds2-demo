@@ -62,7 +62,7 @@ describe('TestCardsPanel', () => {
     expect(copyButton.text()).toBe('コピー')
   })
 
-  it('「実行」押下で store.start が paymentMethodId 付きで呼ばれる', async () => {
+  it('「実行」押下で store.start が currentFlow=client_sdk + paymentMethodId で呼ばれる (flow デフォルト)', async () => {
     const store = usePaymentStore()
     const startSpy = vi
       .spyOn(store, 'start')
@@ -77,7 +77,28 @@ describe('TestCardsPanel', () => {
       currency: 'jpy',
       psp: StripePspClientModule.stripePspClient,
       paymentMethodId: 'pm_card_visa',
+      flow: 'client_sdk',
+      returnUrl: undefined,
     })
+  })
+
+  it('currentFlow=server_redirect の時は returnUrl 付きで start を呼ぶ', async () => {
+    const store = usePaymentStore()
+    store.currentFlow = 'server_redirect'
+    const startSpy = vi
+      .spyOn(store, 'start')
+      .mockResolvedValue(undefined as unknown as void)
+
+    const wrapper = mount(TestCardsPanel)
+    const executeButton = wrapper.find('li').find('button.primary')
+    await executeButton.trigger('click')
+
+    expect(startSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        flow: 'server_redirect',
+        returnUrl: expect.stringContaining('/payments/return'),
+      }),
+    )
   })
 
   it('全 5 card が alias を持つので「実行」ボタンが 5 個 ある', () => {

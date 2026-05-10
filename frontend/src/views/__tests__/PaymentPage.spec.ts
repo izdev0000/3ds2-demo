@@ -24,6 +24,9 @@ function setupFakePsp(opts: {
     card: {},
     unmount: unmountMock,
   })
+  vi.spyOn(psp, 'createPaymentMethod').mockResolvedValue({
+    paymentMethodId: 'pm_test_from_card',
+  })
   const confirmMock = vi
     .fn<typeof psp.confirmAndChallenge>()
     .mockImplementation(async ({ onChallenge }) => {
@@ -139,7 +142,11 @@ describe('PaymentPage 統合テスト', () => {
     expect(wrapper.text()).toContain('✅ 成功')
     expect(localStorage.getItem(PAYMENT_LOCK_KEY)).toBeNull()
 
-    await wrapper.find('button').trigger('click')
+    const resetButton = wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('最初に戻る'))
+    expect(resetButton).toBeTruthy()
+    await resetButton?.trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('カード情報入力')
   })

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import PaymentForm from '@/components/PaymentForm.vue'
+import PaymentFlowTabs from '@/components/PaymentFlowTabs.vue'
 import ChallengeView from '@/components/ChallengeView.vue'
 import ResultView from '@/components/ResultView.vue'
 import TestCardsPanel from '@/components/TestCardsPanel.vue'
@@ -17,11 +18,17 @@ const isFormPhase = computed(
 <template>
   <main class="payment-page">
     <h1>3DS2 Demo</h1>
-    <p class="phase">phase: {{ store.phase }}</p>
+    <PaymentFlowTabs />
+    <p class="phase">
+      phase: {{ store.phase }} / flow: {{ store.currentFlow }}
+    </p>
     <div class="layout">
       <div class="primary">
         <PaymentForm v-if="isFormPhase" />
         <ChallengeView v-if="store.phase === 'challenging'" />
+        <p v-else-if="store.phase === 'redirecting'" class="redirecting">
+          認証ページへ遷移しています…
+        </p>
         <ResultView
           v-if="store.phase === 'succeeded' || store.phase === 'failed'"
         />
@@ -44,6 +51,7 @@ const isFormPhase = computed(
 .phase {
   font-family: monospace;
   opacity: 0.7;
+  font-size: 0.85rem;
 }
 
 .layout {
@@ -60,6 +68,13 @@ const isFormPhase = computed(
 .aside {
   width: 280px;
   flex-shrink: 0;
+}
+
+.redirecting {
+  padding: 1rem;
+  border: 1px dashed var(--color-border);
+  border-radius: 4px;
+  font-style: italic;
 }
 
 @media (max-width: 720px) {

@@ -61,11 +61,18 @@ async function submit() {
     mountError.value = 'カード入力 UI が未準備です'
     return
   }
+  // store.currentFlow を読み、server_redirect なら returnUrl も渡す。
+  // start 内部で flow を分岐してくれる。
   await store.start({
     amount: amount.value,
     currency: currency.value,
     psp,
     card: mounted.card,
+    flow: store.currentFlow,
+    returnUrl:
+      store.currentFlow === 'server_redirect'
+        ? `${window.location.origin}/payments/return`
+        : undefined,
   })
 }
 </script>
