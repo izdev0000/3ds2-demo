@@ -11,7 +11,6 @@ use App\Enums\PaymentStatus;
 use App\Models\Transaction;
 use App\Support\IdGenerator;
 use DateTimeImmutable;
-use LogicException;
 use RuntimeException;
 use Stripe\Exception\SignatureVerificationException;
 use Stripe\StripeClient;
@@ -146,13 +145,5 @@ final class StripeAdapter implements PaymentAdapterInterface
             createdAt: DateTimeImmutable::createFromInterface($tx->created_at),
             updatedAt: DateTimeImmutable::createFromInterface($tx->updated_at),
         );
-    }
-
-    private function notImplementedYet(string $method): LogicException
-    {
-        return new LogicException(sprintf(
-            'StripeAdapter::%s() is not implemented yet (scaffold only).',
-            $method,
-        ));
     }
 }
