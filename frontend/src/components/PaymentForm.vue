@@ -1,14 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import type {
-  Stripe,
-  StripeCardCvcElement,
-  StripeCardExpiryElement,
-  StripeCardNumberElement,
-  StripeElements,
-} from '@stripe/stripe-js'
-import { getStripe } from '@/services/stripe'
 import { isLockedByOther, onChange } from '@/services/paymentLock'
+import type { MountedCardForm } from '@/services/PspClient'
+import { stripePspClient } from '@/services/StripePspClient'
 import { usePaymentStore } from '@/stores/payment'
 
 const numberMount = ref<HTMLDivElement | null>(null)
@@ -21,39 +15,35 @@ const isMounted = ref<boolean>(false)
 const lockedByOther = ref<boolean>(false)
 
 const store = usePaymentStore()
+const psp = stripePspClient
+let mounted: MountedCardForm | null = null
 let unsubLock: (() => void) | null = null
 
-let stripe: Stripe | null = null
-let elements: StripeElements | null = null
-let cardNumber: StripeCardNumberElement | null = null
-let cardExpiry: StripeCardExpiryElement | null = null
-let cardCvc: StripeCardCvcElement | null = null
-
 onMounted(async () => {
+  if (!numberMount.value || !expiryMount.value || !cvcMount.value) {
+    mountError.value = 'mount 先 element が未取得'
+    return
+  }
   try {
-    stripe = await getStripe()
+    mounted = await psp.mountCardForm(
+      {
+        number: numberMount.value,
+        expiry: expiryMount.value,
+        cvc: cvcMount.value,
+      },
+      {
+        placeholders: {
+          number: '4100 0000 0000 0100',
+          expiry: '12 / 40',
+          cvc: '123',
+        },
+      },
+    )
+    isMounted.value = true
   } catch (e) {
     mountError.value = e instanceof Error ? e.message : String(e)
     return
   }
-  if (!stripe || !numberMount.value || !expiryMount.value || !cvcMount.value) {
-    mountError.value = 'Stripe.js の初期化に失敗しました'
-    return
-  }
-  elements = stripe.elements()
-  cardNumber = elements.create('cardNumber', {
-    placeholder: '4100 0000 0000 0100',
-  })
-  cardExpiry = elements.create('cardExpiry', {
-    placeholder: '12 / 40',
-  })
-  cardCvc = elements.create('cardCvc', {
-    placeholder: '123',
-  })
-  cardNumber.mount(numberMount.value)
-  cardExpiry.mount(expiryMount.value)
-  cardCvc.mount(cvcMount.value)
-  isMounted.value = true
 
   lockedByOther.value = isLockedByOther()
   unsubLock = onChange(() => {
@@ -62,23 +52,20 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  cardNumber?.unmount()
-  cardExpiry?.unmount()
-  cardCvc?.unmount()
+  mounted?.unmount()
   unsubLock?.()
 })
 
 async function submit() {
-  if (!stripe || !cardNumber) {
-    mountError.value = 'Card Element が未準備です'
+  if (!mounted) {
+    mountError.value = 'カード入力 UI が未準備です'
     return
   }
-  // confirmCardPayment は同一 Elements インスタンスの cardExpiry / cardCvc を自動連携。
   await store.start({
     amount: amount.value,
     currency: currency.value,
-    stripe,
-    card: cardNumber,
+    psp,
+    card: mounted.card,
   })
 }
 </script>

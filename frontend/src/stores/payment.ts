@@ -1,13 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Stripe, StripeCardNumberElement } from '@stripe/stripe-js'
 import {
   createPaymentIntent,
   type PaymentIntentStatus,
 } from '@/services/payment'
 import { release, tryAcquire } from '@/services/paymentLock'
+import type { CardHandle, PspClient } from '@/services/PspClient'
 
-// Stripe Payment Intent status を EMVCo 3DS2 メッセージフローへマッピング。
+// PSP の payment status を EMVCo 3DS2 メッセージフローへマッピング。
 // frictionless: idle → preparing(AReq/ARes) → succeeded
 // challenge:    idle → preparing(AReq/ARes) → challenging(CReq/CRes) → succeeded
 // 失敗:         任意の段階 → failed
@@ -21,8 +21,8 @@ export type PaymentPhase =
 export interface StartPaymentArgs {
   amount: number
   currency: string
-  stripe: Stripe
-  card: StripeCardNumberElement
+  psp: PspClient
+  card: CardHandle
 }
 
 export const usePaymentStore = defineStore('payment', () => {
@@ -45,7 +45,7 @@ export const usePaymentStore = defineStore('payment', () => {
     phase.value = 'failed'
   }
 
-  async function start({ amount, currency, stripe, card }: StartPaymentArgs) {
+  async function start({ amount, currency, psp, card }: StartPaymentArgs) {
     reset()
 
     // 別 tab で決済が in-flight ならここで弾く (重複決済防止)。
@@ -66,42 +66,23 @@ export const usePaymentStore = defineStore('payment', () => {
       paymentIntentId.value = intent.id
       clientSecret.value = intent.client_secret
 
-      // handleActions: false で next_action を自動処理させず、status を明示的に検査する。
-      const confirmRes = await stripe.confirmCardPayment(
-        intent.client_secret,
-        { payment_method: { card } },
-        { handleActions: false },
-      )
+      const result = await psp.confirmAndChallenge({
+        clientSecret: intent.client_secret,
+        card,
+        onChallenge: () => {
+          phase.value = 'challenging'
+        },
+      })
 
-      if (confirmRes.error) {
-        fail(confirmRes.error.message ?? 'confirm に失敗')
-        return
+      // PSP 由来の生 status を表示用に保持。型は契約と一致する想定だが、
+      // PSP 抽象化の境界なので as でキャストする。
+      if (result.finalStatus !== undefined) {
+        finalStatus.value = result.finalStatus as PaymentIntentStatus
       }
-      if (!confirmRes.paymentIntent) {
-        fail('PaymentIntent が返却されませんでした')
-        return
-      }
-
-      finalStatus.value = confirmRes.paymentIntent.status as PaymentIntentStatus
-
-      if (finalStatus.value === 'requires_action') {
-        phase.value = 'challenging'
-        const challengeRes = await stripe.handleNextAction({
-          clientSecret: intent.client_secret,
-        })
-        if (challengeRes.error) {
-          fail(challengeRes.error.message ?? 'challenge に失敗')
-          return
-        }
-        finalStatus.value =
-          (challengeRes.paymentIntent?.status as PaymentIntentStatus) ??
-          finalStatus.value
-      }
-
-      if (finalStatus.value === 'succeeded') {
+      if (result.kind === 'succeeded') {
         phase.value = 'succeeded'
       } else {
-        fail(`想定外の最終 status: ${finalStatus.value}`)
+        fail(result.message)
       }
     } finally {
       release()

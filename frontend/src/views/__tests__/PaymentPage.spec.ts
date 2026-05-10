@@ -1,82 +1,43 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type {
-  PaymentIntentResult,
-  Stripe,
-  StripeCardCvcElement,
-  StripeCardExpiryElement,
-  StripeCardNumberElement,
-  StripeElements,
-} from '@stripe/stripe-js'
 import PaymentPage from '@/views/PaymentPage.vue'
-import * as stripeService from '@/services/stripe'
+import * as StripePspClientModule from '@/services/StripePspClient'
 import * as paymentService from '@/services/payment'
+import type { ConfirmResult } from '@/services/PspClient'
 
 const PAYMENT_LOCK_KEY = '3ds2-demo:payment-lock'
 
-type ConfirmFn = Stripe['confirmCardPayment']
-type NextActionFn = Stripe['handleNextAction']
-
-interface FakeStripeSetup {
-  stripe: Stripe
-  confirmMock: ReturnType<typeof vi.fn<ConfirmFn>>
-  nextActionMock: ReturnType<typeof vi.fn<NextActionFn>>
+interface FakePspSetup {
+  confirmMock: ReturnType<typeof vi.fn>
+  unmountMock: ReturnType<typeof vi.fn>
 }
 
-function makeFakeElement<T>(): T {
-  return {
-    mount: () => {},
-    unmount: () => {},
-  } as unknown as T
-}
-
-const succeededIntent = {
-  paymentIntent: {
-    id: 'pi_test',
-    status: 'succeeded',
-    client_secret: 'cs_test',
-  },
-} as unknown as PaymentIntentResult
-
-function makeFakeStripe(opts: {
-  confirm?: PaymentIntentResult
-  next?: PaymentIntentResult | Promise<PaymentIntentResult>
-} = {}): FakeStripeSetup {
-  const cardNumber = makeFakeElement<StripeCardNumberElement>()
-  const cardExpiry = makeFakeElement<StripeCardExpiryElement>()
-  const cardCvc = makeFakeElement<StripeCardCvcElement>()
-
-  const elements = {
-    create: (type: string) => {
-      if (type === 'cardNumber') return cardNumber
-      if (type === 'cardExpiry') return cardExpiry
-      if (type === 'cardCvc') return cardCvc
-      throw new Error(`unexpected element type: ${type}`)
-    },
-  } as unknown as StripeElements
-
+function setupFakePsp(opts: {
+  confirm?: ConfirmResult | Promise<ConfirmResult>
+  triggerChallenge?: boolean
+} = {}): FakePspSetup {
+  const psp = StripePspClientModule.stripePspClient
+  vi.spyOn(psp, 'init').mockResolvedValue()
+  const unmountMock = vi.fn<() => void>()
+  vi.spyOn(psp, 'mountCardForm').mockResolvedValue({
+    card: {},
+    unmount: unmountMock,
+  })
   const confirmMock = vi
-    .fn<ConfirmFn>()
-    .mockResolvedValue(opts.confirm ?? succeededIntent)
-  const nextActionMock = vi.fn<NextActionFn>()
-  if (opts.next instanceof Promise) {
-    nextActionMock.mockReturnValue(opts.next)
-  } else {
-    nextActionMock.mockResolvedValue(opts.next ?? succeededIntent)
-  }
-
-  const stripe = {
-    elements: vi.fn<() => StripeElements>(() => elements),
-    confirmCardPayment: confirmMock,
-    handleNextAction: nextActionMock,
-  } as unknown as Stripe
-
-  return { stripe, confirmMock, nextActionMock }
+    .fn<typeof psp.confirmAndChallenge>()
+    .mockImplementation(async ({ onChallenge }) => {
+      if (opts.triggerChallenge) onChallenge?.()
+      if (opts.confirm instanceof Promise) {
+        return opts.confirm
+      }
+      return opts.confirm ?? { kind: 'succeeded', finalStatus: 'succeeded' }
+    })
+  vi.spyOn(psp, 'confirmAndChallenge').mockImplementation(confirmMock)
+  return { confirmMock, unmountMock }
 }
 
-async function mountPage(stripe: Stripe): Promise<VueWrapper> {
-  vi.spyOn(stripeService, 'getStripe').mockResolvedValue(stripe)
+async function mountPage(): Promise<VueWrapper> {
   const wrapper = mount(PaymentPage, { attachTo: document.body })
   await flushPromises()
   return wrapper
@@ -98,77 +59,60 @@ describe('PaymentPage 統合テスト', () => {
     localStorage.clear()
   })
 
-  it('mount 直後は PaymentForm 表示 + Stripe Elements が初期化される', async () => {
-    const { stripe } = makeFakeStripe()
-    const wrapper = await mountPage(stripe)
-
+  it('mount 直後は PaymentForm 表示 + PspClient.mountCardForm が呼ばれる', async () => {
+    setupFakePsp()
+    const wrapper = await mountPage()
     expect(wrapper.text()).toContain('カード情報入力')
-    expect(stripe.elements).toHaveBeenCalled()
+    expect(
+      StripePspClientModule.stripePspClient.mountCardForm,
+    ).toHaveBeenCalled()
   })
 
   it('frictionless: submit → succeeded → ResultView 表示', async () => {
-    const { stripe, confirmMock, nextActionMock } = makeFakeStripe()
-    const wrapper = await mountPage(stripe)
-
+    const { confirmMock } = setupFakePsp()
+    const wrapper = await mountPage()
     await wrapper.find('form').trigger('submit')
     await flushPromises()
-
     expect(wrapper.text()).toContain('✅ 成功')
     expect(confirmMock).toHaveBeenCalledTimes(1)
-    expect(nextActionMock).not.toHaveBeenCalled()
   })
 
-  it('challenge: requires_action → ChallengeView を経由して succeeded へ', async () => {
-    let resolveNext: (v: PaymentIntentResult) => void = () => {}
-    const nextPromise = new Promise<PaymentIntentResult>((r) => {
-      resolveNext = r
+  it('challenge: onChallenge 通知中に ChallengeView を表示し、最終 succeeded', async () => {
+    let resolveConfirm: (v: ConfirmResult) => void = () => {}
+    const pending = new Promise<ConfirmResult>((r) => {
+      resolveConfirm = r
     })
-    const { stripe } = makeFakeStripe({
-      confirm: {
-        paymentIntent: {
-          id: 'pi_test',
-          status: 'requires_action',
-          client_secret: 'cs_test',
-        },
-      } as unknown as PaymentIntentResult,
-      next: nextPromise,
-    })
-    const wrapper = await mountPage(stripe)
+    setupFakePsp({ triggerChallenge: true, confirm: pending })
+    const wrapper = await mountPage()
 
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
-    // confirm は解決済み、handleNextAction は pending → ChallengeView 表示中
+    // onChallenge は呼ばれ済み (phase = challenging)、confirm は pending
     expect(wrapper.text()).toContain('3DS2 チャレンジ実行中')
     expect(wrapper.text()).not.toContain('✅ 成功')
 
-    resolveNext(succeededIntent)
+    resolveConfirm({ kind: 'succeeded', finalStatus: 'succeeded' })
     await flushPromises()
-
     expect(wrapper.text()).toContain('✅ 成功')
   })
 
-  it('decline: confirm エラー → ResultView (失敗) にメッセージ表示', async () => {
-    const { stripe } = makeFakeStripe({
-      confirm: {
-        error: { message: 'card declined' },
-      } as unknown as PaymentIntentResult,
-    })
-    const wrapper = await mountPage(stripe)
-
+  it('decline: PspClient が failed → ResultView (失敗) にメッセージ表示', async () => {
+    setupFakePsp({ confirm: { kind: 'failed', message: 'card declined' } })
+    const wrapper = await mountPage()
     await wrapper.find('form').trigger('submit')
     await flushPromises()
-
     expect(wrapper.text()).toContain('❌ 失敗')
     expect(wrapper.text()).toContain('card declined')
   })
 
   it('別 tab で lock 取得 → 警告バナー + submit ボタン disable', async () => {
-    const { stripe } = makeFakeStripe()
-    const wrapper = await mountPage(stripe)
+    setupFakePsp()
+    const wrapper = await mountPage()
 
-    const submitBtn = wrapper.find('button[type="submit"]')
-    expect(submitBtn.attributes('disabled')).toBeUndefined()
+    expect(
+      wrapper.find('button[type="submit"]').attributes('disabled'),
+    ).toBeUndefined()
     expect(wrapper.text()).not.toContain('別 tab で決済処理中')
 
     localStorage.setItem(
@@ -187,8 +131,8 @@ describe('PaymentPage 統合テスト', () => {
   })
 
   it('成功後に「最初に戻る」で PaymentForm に戻り、lock も解放される', async () => {
-    const { stripe } = makeFakeStripe()
-    const wrapper = await mountPage(stripe)
+    setupFakePsp()
+    const wrapper = await mountPage()
 
     await wrapper.find('form').trigger('submit')
     await flushPromises()
