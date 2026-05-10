@@ -52,6 +52,24 @@ services:
     depends_on:
       - backend-laravel
 
+  stripe-cli:
+    image: stripe/stripe-cli:latest
+    container_name: 3ds2-demo-stripe-cli
+    profiles: ["laravel"]
+    # 起動毎に新しい webhook signing secret (whsec_...) がログに表示されるため、
+    # 初回は `docker compose logs stripe-cli` で確認し backend-laravel/.env の
+    # STRIPE_WEBHOOK_SECRET に転記する運用とする（学習デモのため自動化はしない）。
+    command: >-
+      listen
+      --forward-to nginx:80/api/webhooks/stripe
+      --skip-verify
+    environment:
+      STRIPE_API_KEY: ${STRIPE_API_KEY:-}
+      STRIPE_DEVICE_NAME: 3ds2-demo
+    depends_on:
+      nginx:
+        condition: service_started
+
   frontend:
     build:
       context: .
