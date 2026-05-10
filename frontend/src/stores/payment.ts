@@ -18,12 +18,12 @@ export type PaymentPhase =
   | 'succeeded'
   | 'failed'
 
-export interface StartPaymentArgs {
+// card と paymentMethodId は XOR (どちらか一方を指定)。
+export type StartPaymentArgs = {
   amount: number
   currency: string
   psp: PspClient
-  card: CardHandle
-}
+} & ({ card: CardHandle } | { paymentMethodId: string })
 
 export const usePaymentStore = defineStore('payment', () => {
   const phase = ref<PaymentPhase>('idle')
@@ -45,7 +45,8 @@ export const usePaymentStore = defineStore('payment', () => {
     phase.value = 'failed'
   }
 
-  async function start({ amount, currency, psp, card }: StartPaymentArgs) {
+  async function start(args: StartPaymentArgs) {
+    const { amount, currency, psp } = args
     reset()
 
     // 別 tab で決済が in-flight ならここで弾く (重複決済防止)。
@@ -66,9 +67,15 @@ export const usePaymentStore = defineStore('payment', () => {
       paymentIntentId.value = intent.id
       clientSecret.value = intent.client_secret
 
+      // card / paymentMethodId のどちらが渡されたかで PspClient 引数を切替。
+      const paymentMethodArg =
+        'paymentMethodId' in args
+          ? { paymentMethodId: args.paymentMethodId }
+          : { card: args.card }
+
       const result = await psp.confirmAndChallenge({
         clientSecret: intent.client_secret,
-        card,
+        ...paymentMethodArg,
         onChallenge: () => {
           phase.value = 'challenging'
         },

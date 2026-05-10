@@ -62,13 +62,21 @@ export class StripePspClient implements PspClient {
   }
 
   async confirmAndChallenge(args: ConfirmAndChallengeArgs): Promise<ConfirmResult> {
+    // paymentMethodId 指定時は Elements を経由せず、Stripe の test PM alias 等を
+    // 直接渡して confirm する (TestCardsPanel からの 1-click 実行)。
+    // ただし init は事前に必要なため、未初期化なら自前で行う。
+    if (!this.stripe) await this.init()
     if (!this.stripe) throw new Error('Stripe 未初期化')
-    const cardElement = args.card as StripeCardNumberElement
+
+    const paymentMethod =
+      'paymentMethodId' in args
+        ? args.paymentMethodId
+        : { card: args.card as StripeCardNumberElement }
 
     // handleActions: false で next_action を自動処理させず、status を明示的に検査する。
     const confirmRes = await this.stripe.confirmCardPayment(
       args.clientSecret,
-      { payment_method: { card: cardElement } },
+      { payment_method: paymentMethod },
       { handleActions: false },
     )
     if (confirmRes.error) {

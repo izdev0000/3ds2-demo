@@ -114,4 +114,19 @@ describe('payment store', () => {
     await store.start({ amount: 100, currency: 'jpy', psp, card })
     expect(localStorage.getItem(PAYMENT_LOCK_KEY)).toBeNull()
   })
+
+  it('paymentMethodId 経由で start すると PspClient に paymentMethodId が渡る', async () => {
+    const store = usePaymentStore()
+    const psp = makeFakePsp()
+    await store.start({
+      amount: 100,
+      currency: 'jpy',
+      psp,
+      paymentMethodId: 'pm_card_visa',
+    })
+    expect(psp.confirmAndChallenge).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentMethodId: 'pm_card_visa' }),
+    )
+    expect(store.phase).toBe('succeeded')
+  })
 })

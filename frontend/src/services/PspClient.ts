@@ -27,13 +27,15 @@ export interface MountedCardForm {
   unmount: () => void
 }
 
-export interface ConfirmAndChallengeArgs {
+// card と paymentMethodId は XOR (どちらか一方を指定)。
+// card: Elements 経由のカード入力 (通常 flow)
+// paymentMethodId: Stripe の test PM alias 等 (`pm_card_visa` 等) を直接 confirm
+export type ConfirmAndChallengeArgs = {
   clientSecret: string
-  card: CardHandle
   // 3DS2 challenge が発火した瞬間に呼ばれる (UI で「認証中」を表示するため)。
   // frictionless で完了する場合は呼ばれない。
   onChallenge?: () => void
-}
+} & ({ card: CardHandle } | { paymentMethodId: string })
 
 // confirm + 必要なら challenge まで完了した最終結果。
 // finalStatus は表示用の生 status (PSP 由来、debug value)。
