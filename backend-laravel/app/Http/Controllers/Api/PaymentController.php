@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Adapters\PaymentAdapterInterface;
+use App\DTO\CreatePaymentRequest;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,7 +15,11 @@ use Illuminate\Http\Request;
  *
  * @see docs/api-contract.yaml createPayment / getPayment / confirmPayment / listPaymentEvents
  *
- * 本クラスはスケルトン (Y2)。実装は Phase 4 後半 (Y3) で行う。
+ * 実装段階:
+ *   - create:   実装済み (Y3-3)
+ *   - show:     未実装 (Y3-4)
+ *   - confirm:  未実装 (Y3-4)
+ *   - events:   未実装 (Y3-7)
  */
 final class PaymentController extends Controller
 {
@@ -25,7 +30,16 @@ final class PaymentController extends Controller
 
     public function create(Request $request): JsonResponse
     {
-        return $this->notImplemented(__FUNCTION__);
+        $validated = $request->validate([
+            'amount' => ['required', 'integer', 'min:50'],
+            'currency' => ['required', 'string', 'size:3'],
+            'return_url' => ['nullable', 'url'],
+        ]);
+
+        $dto = CreatePaymentRequest::fromArray($validated);
+        $response = $this->adapter->createPayment($dto);
+
+        return response()->json($response->toArray(), 201);
     }
 
     public function show(string $id): JsonResponse
@@ -47,7 +61,7 @@ final class PaymentController extends Controller
     {
         return response()->json([
             'code' => 'not_implemented',
-            'message' => sprintf('PaymentController::%s() is a Y2 skeleton; logic comes in Y3.', $method),
+            'message' => sprintf('PaymentController::%s() is not implemented yet.', $method),
         ], 501);
     }
 }
