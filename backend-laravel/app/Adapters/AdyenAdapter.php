@@ -33,7 +33,7 @@ final class AdyenAdapter implements PaymentAdapterInterface
         throw $this->stubException(__FUNCTION__);
     }
 
-    public function verifyWebhookSignature(string $payload, string $signature): void
+    public function verifyWebhookSignature(string $payload, string $signature): array
     {
         throw $this->stubException(__FUNCTION__);
     }

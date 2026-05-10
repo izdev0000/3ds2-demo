@@ -39,12 +39,18 @@ interface PaymentAdapterInterface
     public function getPayment(string $id): PaymentResponse;
 
     /**
-     * Webhook 署名を検証する。検証失敗時は例外を投げる。
+     * Webhook 署名を検証し、parse 済み event payload を array で返す。
+     *
+     * 検証は各 PSP 固有のアルゴリズム (Stripe なら HMAC-SHA256 + timestamp 検査)。
+     * 検証成功時のみ payload を array へ展開して返却する。Controller は
+     * 戻り値を idempotency 検査と State Machine 遷移にそのまま使える。
      *
      * @param  string  $payload  raw リクエストボディ (Stripe は raw payload を必要とする)
      * @param  string  $signature  PSP 固有の署名ヘッダ値 (Stripe なら Stripe-Signature)
      *
-     * @throws \RuntimeException 検証失敗時 (各 Adapter は固有例外でラップしてもよい)
+     * @return array<string, mixed> parse 済み event payload
+     *
+     * @throws \RuntimeException 検証失敗 / payload 不正時 (各 Adapter は固有例外でラップしてもよい)
      */
-    public function verifyWebhookSignature(string $payload, string $signature): void;
+    public function verifyWebhookSignature(string $payload, string $signature): array;
 }

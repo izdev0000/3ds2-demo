@@ -13,7 +13,10 @@ use App\Support\IdGenerator;
 use DateTimeImmutable;
 use LogicException;
 use RuntimeException;
+use Stripe\Exception\SignatureVerificationException;
 use Stripe\StripeClient;
+use Stripe\Webhook;
+use UnexpectedValueException;
 
 /**
  * Stripe 用 Adapter。
@@ -26,7 +29,7 @@ use Stripe\StripeClient;
  *   - createPayment:           実装済み (Y3-2)
  *   - confirmPayment:          実装済み (Y3-4)
  *   - getPayment:              実装済み (Y3-4)
- *   - verifyWebhookSignature:  未実装 (Y3-5 で実装)
+ *   - verifyWebhookSignature:  実装済み (Y3-5)
  */
 final class StripeAdapter implements PaymentAdapterInterface
 {
@@ -109,9 +112,26 @@ final class StripeAdapter implements PaymentAdapterInterface
         return $this->toResponse($transaction);
     }
 
-    public function verifyWebhookSignature(string $payload, string $signature): void
+    public function verifyWebhookSignature(string $payload, string $signature): array
     {
-        throw $this->notImplementedYet(__FUNCTION__);
+        try {
+            // Stripe SDK が timestamp 検査込みで HMAC-SHA256 を検証し、
+            // 検証成功時に Stripe\Event を返す。失敗時は例外を投げる。
+            $event = Webhook::constructEvent($payload, $signature, $this->webhookSecret);
+        } catch (SignatureVerificationException $e) {
+            throw new RuntimeException(
+                'Stripe webhook signature verification failed: '.$e->getMessage(),
+                previous: $e,
+            );
+        } catch (UnexpectedValueException $e) {
+            // payload が JSON として parse 不能
+            throw new RuntimeException(
+                'Stripe webhook payload is invalid JSON: '.$e->getMessage(),
+                previous: $e,
+            );
+        }
+
+        return $event->toArray();
     }
 
     private function toResponse(Transaction $tx): PaymentResponse
