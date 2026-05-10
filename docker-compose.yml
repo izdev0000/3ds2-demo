@@ -85,6 +85,8 @@ services:
     environment:
       # Vite から見た backend のオリジン（ホスト側で公開されているポート）
       VITE_BACKEND_ORIGIN: ${VITE_BACKEND_ORIGIN:-http://localhost:8000}
+      # Stripe.js が利用する publishable key（pk_test_...）
+      VITE_STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
 
 volumes:
   mysql_data:
