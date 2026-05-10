@@ -134,7 +134,7 @@ paths:
                   summary: 3DS2 challenge が必要な場合
                   value:
                     id: txn_01HYZ800
-                    stripe_payment_intent_id: pi_3RT...
+                    psp_payment_intent_id: pi_3RT...
                     client_secret: pi_3RT..._secret_xyz
                     status: requires_action
                     amount: 1000
@@ -149,7 +149,7 @@ paths:
                   summary: フリクションレスで成功した場合
                   value:
                     id: txn_01HYZ801
-                    stripe_payment_intent_id: pi_3RT...
+                    psp_payment_intent_id: pi_3RT...
                     client_secret: pi_3RT..._secret_xyz
                     status: succeeded
                     amount: 1000
@@ -294,9 +294,9 @@ components:
           type: string
           description: 内部 transaction ID
           example: txn_01HYZ800
-        stripe_payment_intent_id:
+        psp_payment_intent_id:
           type: string
-          description: Stripe 側の PaymentIntent ID
+          description: PSP 側の PaymentIntent ID (Stripe なら pi_..., Adyen なら pspReference 相当)
           example: pi_3RT0...
         client_secret:
           type: string
@@ -386,13 +386,13 @@ components:
           type: string
           description: 内部 event ID
           example: evt_01HYZ900
-        stripe_event_id:
+        psp_event_id:
           type: string
-          description: Stripe event ID（idempotency 検証に使う）
+          description: PSP 側の event ID (idempotency 検証に使う)
           example: evt_3RT0...
         event_type:
           type: string
-          description: Stripe event type
+          description: PSP の event type (Stripe なら payment_intent.succeeded 等)
           example: payment_intent.succeeded
         payment_intent_id:
           type: string

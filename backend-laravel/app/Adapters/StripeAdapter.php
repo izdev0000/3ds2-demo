@@ -138,7 +138,7 @@ final class StripeAdapter implements PaymentAdapterInterface
     {
         return new PaymentResponse(
             id: $tx->id,
-            stripePaymentIntentId: $tx->psp_payment_intent_id,
+            pspPaymentIntentId: $tx->psp_payment_intent_id,
             clientSecret: (string) $tx->client_secret,
             status: $tx->status,
             amount: $tx->amount,

@@ -19,7 +19,7 @@ final readonly class PaymentResponse
      */
     public function __construct(
         public string $id,
-        public ?string $stripePaymentIntentId,
+        public ?string $pspPaymentIntentId,
         public string $clientSecret,
         public PaymentStatus $status,
         public int $amount,
@@ -39,7 +39,7 @@ final readonly class PaymentResponse
     {
         return [
             'id' => $this->id,
-            'stripe_payment_intent_id' => $this->stripePaymentIntentId,
+            'psp_payment_intent_id' => $this->pspPaymentIntentId,
             'client_secret' => $this->clientSecret,
             'status' => $this->status->value,
             'amount' => $this->amount,
