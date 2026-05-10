@@ -1,0 +1,483 @@
+openapi: 3.1.0
+info:
+  title: 3ds2-demo Payment API
+  version: 0.1.0
+  description: |
+    EMV 3-D Secure 2.x 統合学習デモの Payment API 契約定義。
+    Stripe Payment Intents API をベースに、3DS2 challenge フローを
+    明示的にハンドリングする backend の REST 仕様。
+
+    ## 関連ドキュメント
+    - 3DS2 仕様概観: `docs/3ds2-overview-ja.md`
+    - State Machine 詳細: `docs/architecture.md`
+
+  contact:
+    name: 3ds2-demo
+    url: https://github.com/izdev0000/3ds2-demo
+  license:
+    name: MIT
+    url: https://github.com/izdev0000/3ds2-demo/blob/main/LICENSE
+
+servers:
+  - url: http://localhost:8000
+    description: ローカル開発環境（docker compose）
+
+tags:
+  - name: payments
+    description: Payment Intent の作成・確認・状態取得
+  - name: webhooks
+    description: PSP からの webhook 受信
+
+paths:
+  /api/payments:
+    post:
+      tags: [payments]
+      summary: PaymentIntent を作成
+      description: |
+        新規の Payment Intent を作成する。Stripe 側でも対応する PaymentIntent が
+        生成され、`request_three_d_secure: 'any'` を付与して
+        frictionless / challenge どちらの経路でも 3DS2 を経由するよう要求する。
+
+        EMVCo 3DS2 メッセージフローでは AReq に相当するタイミング。
+      operationId: createPayment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentRequest'
+            examples:
+              jpy_basic:
+                summary: 1000 円の決済（フリクションレス想定）
+                value:
+                  amount: 1000
+                  currency: jpy
+              jpy_with_return:
+                summary: redirect 経路用に return_url 付き
+                value:
+                  amount: 1000
+                  currency: jpy
+                  return_url: http://localhost:5173/payments/return
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/payments/{id}:
+    get:
+      tags: [payments]
+      summary: PaymentIntent の状態を取得
+      description: |
+        内部 ID から PaymentIntent の現在状態と Stripe 側の最新ステータスを返す。
+        本 endpoint は client が webhook 反映後の最終状態を確認するために使う。
+      operationId: getPayment
+      parameters:
+        - $ref: '#/components/parameters/PaymentIdPath'
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/payments/{id}/confirm:
+    post:
+      tags: [payments]
+      summary: PaymentIntent を confirm
+      description: |
+        Stripe.js の Stripe Elements で生成した payment_method_id を渡して
+        PaymentIntent を confirm する。
+
+        3DS2 が必要な場合は `status = requires_action` が返り、`next_action` に
+        challenge 情報が入る。frontend はその type に応じて：
+        - `use_stripe_sdk`: inline challenge → `stripe.handleNextAction(client_secret)` 呼び出し
+        - `redirect_to_url`: 別ページへ遷移
+
+        EMVCo 3DS2 メッセージフローでは ARes / CReq の判定に相当する。
+      operationId: confirmPayment
+      parameters:
+        - $ref: '#/components/parameters/PaymentIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmPaymentRequest'
+            examples:
+              frictionless:
+                summary: フリクションレスで通る想定（テストカード 4000008400001629）
+                value:
+                  payment_method_id: pm_card_visa
+              challenge_required:
+                summary: 3DS2 challenge を発火させる（テストカード 4000002760003184）
+                value:
+                  payment_method_id: pm_card_threeDSecureRequired
+      responses:
+        '200':
+          description: confirm 完了またはアクション要求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+              examples:
+                requires_action:
+                  summary: 3DS2 challenge が必要な場合
+                  value:
+                    id: txn_01HYZ800
+                    stripe_payment_intent_id: pi_3RT...
+                    client_secret: pi_3RT..._secret_xyz
+                    status: requires_action
+                    amount: 1000
+                    currency: jpy
+                    next_action:
+                      type: use_stripe_sdk
+                      use_stripe_sdk:
+                        type: three_d_secure_redirect
+                    created_at: '2026-05-10T19:00:00Z'
+                    updated_at: '2026-05-10T19:00:01Z'
+                succeeded:
+                  summary: フリクションレスで成功した場合
+                  value:
+                    id: txn_01HYZ801
+                    stripe_payment_intent_id: pi_3RT...
+                    client_secret: pi_3RT..._secret_xyz
+                    status: succeeded
+                    amount: 1000
+                    currency: jpy
+                    next_action: null
+                    created_at: '2026-05-10T19:00:00Z'
+                    updated_at: '2026-05-10T19:00:01Z'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/payments/{id}/events:
+    get:
+      tags: [payments]
+      summary: PaymentIntent に紐づく webhook イベント履歴
+      description: |
+        State Machine の遷移を可視化するため、当該 PaymentIntent に対応する
+        webhook イベントを時系列（古い順）で返す。
+      operationId: listPaymentEvents
+      parameters:
+        - $ref: '#/components/parameters/PaymentIdPath'
+      responses:
+        '200':
+          description: イベント一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PaymentEvent'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/webhooks/stripe:
+    post:
+      tags: [webhooks]
+      summary: Stripe webhook 受信
+      description: |
+        Stripe から送られてくる webhook イベントを受け取る endpoint。
+        `Stripe-Signature` ヘッダで HMAC-SHA256 署名を検証し、検証成功時のみ
+        State Machine の遷移と DB 反映を行う。
+
+        本 endpoint は frontend からは呼ばれない。ローカル開発では Stripe CLI で
+        forward する：
+        ```
+        stripe listen --forward-to localhost:8000/api/webhooks/stripe
+        ```
+      operationId: receiveStripeWebhook
+      parameters:
+        - in: header
+          name: Stripe-Signature
+          required: true
+          schema:
+            type: string
+          description: Stripe による HMAC-SHA256 署名（`t=…,v1=…` 形式）
+          example: t=1234567890,v1=abc...
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StripeWebhookEvent'
+      responses:
+        '204':
+          description: 受信成功（処理は idempotent）
+        '400':
+          description: 署名検証失敗 / リクエスト形式不正
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  parameters:
+    PaymentIdPath:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        pattern: '^txn_[A-Za-z0-9]+$'
+      description: 内部 transaction ID（`txn_` プレフィックス + ULID 等）
+      example: txn_01HYZ800
+
+  schemas:
+    CreatePaymentRequest:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: integer
+          minimum: 50
+          description: 通貨の最小単位（JPY なら円、USD ならセント）
+          example: 1000
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          pattern: '^[a-z]{3}$'
+          description: ISO 4217 通貨コード（小文字）
+          example: jpy
+        return_url:
+          type: string
+          format: uri
+          description: |
+            redirect 経路の 3DS2 challenge 後に遷移する URL。
+            inline challenge の場合は不要。
+          example: http://localhost:5173/payments/return
+
+    ConfirmPaymentRequest:
+      type: object
+      required: [payment_method_id]
+      properties:
+        payment_method_id:
+          type: string
+          description: |
+            Stripe Elements で生成した PaymentMethod ID（`pm_…`）。
+            テスト時は `pm_card_visa` 等のテスト用エイリアスも受け付ける。
+          example: pm_card_visa
+        return_url:
+          type: string
+          format: uri
+          description: redirect 経路の 3DS2 challenge 後に遷移する URL
+
+    PaymentResponse:
+      type: object
+      required:
+        - id
+        - status
+        - amount
+        - currency
+        - client_secret
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          description: 内部 transaction ID
+          example: txn_01HYZ800
+        stripe_payment_intent_id:
+          type: string
+          description: Stripe 側の PaymentIntent ID
+          example: pi_3RT0...
+        client_secret:
+          type: string
+          description: |
+            frontend が Stripe.js で 3DS2 challenge を完了させるために使う
+            client_secret。エンドユーザーに露出してよいが秘密鍵 (sk_…) とは別物。
+          example: pi_3RT0..._secret_xyz
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        amount:
+          type: integer
+          example: 1000
+        currency:
+          type: string
+          example: jpy
+        next_action:
+          $ref: '#/components/schemas/NextAction'
+        created_at:
+          type: string
+          format: date-time
+          example: '2026-05-10T19:00:00Z'
+        updated_at:
+          type: string
+          format: date-time
+          example: '2026-05-10T19:00:01Z'
+
+    PaymentStatus:
+      type: string
+      description: |
+        Stripe Payment Intent の状態。EMVCo 3DS2 メッセージフロー
+        (AReq → ARes → CReq → CRes) との対応マッピングは `docs/architecture.md` 参照。
+
+        | Stripe status              | EMVCo フェーズ      |
+        | -------------------------- | ------------------- |
+        | requires_payment_method    | 未送信              |
+        | requires_confirmation      | AReq 直前           |
+        | requires_action            | ARes / CReq         |
+        | processing                 | CRes 後の processing |
+        | succeeded                  | 認証成功 + 売上確定 |
+        | requires_capture           | 認証成功 (manual capture 時) |
+        | canceled                   | キャンセル          |
+      enum:
+        - requires_payment_method
+        - requires_confirmation
+        - requires_action
+        - processing
+        - requires_capture
+        - canceled
+        - succeeded
+
+    NextAction:
+      type:
+        - object
+        - 'null'
+      description: |
+        3DS2 challenge 等、frontend で追加処理が必要な場合に含まれる。
+        Stripe の next_action オブジェクト構造に準拠（必要最小限のフィールドのみ抽出）。
+      properties:
+        type:
+          type: string
+          enum:
+            - use_stripe_sdk
+            - redirect_to_url
+        use_stripe_sdk:
+          type: object
+          description: |
+            inline challenge の場合に Stripe.js が解釈する詳細情報。
+            構造は Stripe API 仕様に準拠（バージョン依存があるため透過）。
+          additionalProperties: true
+        redirect_to_url:
+          type: object
+          properties:
+            url:
+              type: string
+              format: uri
+              description: redirect 先 URL（Stripe ホスト or PSP）
+            return_url:
+              type: string
+              format: uri
+              description: challenge 完了後の戻り URL
+
+    PaymentEvent:
+      type: object
+      required: [id, event_type, received_at]
+      properties:
+        id:
+          type: string
+          description: 内部 event ID
+          example: evt_01HYZ900
+        stripe_event_id:
+          type: string
+          description: Stripe event ID（idempotency 検証に使う）
+          example: evt_3RT0...
+        event_type:
+          type: string
+          description: Stripe event type
+          example: payment_intent.succeeded
+        payment_intent_id:
+          type: string
+          description: 紐づく PaymentIntent の内部 ID
+          example: txn_01HYZ800
+        received_at:
+          type: string
+          format: date-time
+        processed_at:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: 処理完了時刻。null は未処理を意味する
+
+    StripeWebhookEvent:
+      type: object
+      description: |
+        Stripe から送信される webhook payload。完全な仕様は Stripe API ドキュメント参照。
+        ここでは検証に必要な最小限のフィールドのみ宣言する。
+      required: [id, type]
+      properties:
+        id:
+          type: string
+          example: evt_3RT0...
+        type:
+          type: string
+          example: payment_intent.succeeded
+        data:
+          type: object
+          additionalProperties: true
+          description: イベント本体（type に依存）
+        created:
+          type: integer
+          description: Unix timestamp
+      additionalProperties: true
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: アプリケーション固有のエラーコード
+          enum:
+            - invalid_amount
+            - invalid_currency
+            - invalid_payment_method
+            - payment_not_found
+            - payment_already_confirmed
+            - signature_verification_failed
+            - stripe_api_error
+            - internal_error
+          example: invalid_amount
+        message:
+          type: string
+          description: 人間可読なエラーメッセージ
+          example: amount must be at least 50
+        details:
+          type: object
+          additionalProperties: true
+          description: エラー固有の追加情報
+
+  responses:
+    BadRequest:
+      description: 不正なリクエスト
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: リソースが存在しない
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UnprocessableEntity:
+      description: リクエストは valid だが状態的に処理できない
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalServerError:
+      description: サーバ内部エラー（Stripe API 障害含む）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
