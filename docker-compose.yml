@@ -18,6 +18,10 @@ services:
       - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+      # 初回起動時に PHPUnit 用の test DB 等を作成する SQL を実行する
+      # (既存 mysql_data volume が残っている環境では走らない点に注意。
+      #  その場合は SQL ファイル先頭のコメントの手順で手動実行する)
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
       interval: 5s
