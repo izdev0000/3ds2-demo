@@ -8,6 +8,7 @@ import type {
   StripeElements,
 } from '@stripe/stripe-js'
 import { getStripe } from '@/services/stripe'
+import { isLockedByOther, onChange } from '@/services/paymentLock'
 import { usePaymentStore } from '@/stores/payment'
 
 const numberMount = ref<HTMLDivElement | null>(null)
@@ -17,8 +18,10 @@ const amount = ref<number>(100)
 const currency = ref<string>('jpy')
 const mountError = ref<string | null>(null)
 const isMounted = ref<boolean>(false)
+const lockedByOther = ref<boolean>(false)
 
 const store = usePaymentStore()
+let unsubLock: (() => void) | null = null
 
 let stripe: Stripe | null = null
 let elements: StripeElements | null = null
@@ -51,12 +54,18 @@ onMounted(async () => {
   cardExpiry.mount(expiryMount.value)
   cardCvc.mount(cvcMount.value)
   isMounted.value = true
+
+  lockedByOther.value = isLockedByOther()
+  unsubLock = onChange(() => {
+    lockedByOther.value = isLockedByOther()
+  })
 })
 
 onBeforeUnmount(() => {
   cardNumber?.unmount()
   cardExpiry?.unmount()
   cardCvc?.unmount()
+  unsubLock?.()
 })
 
 async function submit() {
@@ -79,6 +88,9 @@ async function submit() {
     <h2>カード情報入力</h2>
 
     <p v-if="mountError" class="error">{{ mountError }}</p>
+    <p v-if="lockedByOther" class="warn">
+      別 tab で決済処理中のため、この tab からは送信できません。
+    </p>
 
     <div class="row">
       <label>
@@ -109,7 +121,7 @@ async function submit() {
 
     <button
       type="submit"
-      :disabled="!isMounted || store.phase === 'preparing'"
+      :disabled="!isMounted || store.phase === 'preparing' || lockedByOther"
     >
       {{ store.phase === 'preparing' ? '送信中…' : '支払う' }}
     </button>
@@ -161,6 +173,14 @@ async function submit() {
 .error {
   color: #c00;
   font-size: 0.85rem;
+}
+
+.warn {
+  color: #b58900;
+  font-size: 0.85rem;
+  padding: 0.5rem;
+  background: rgba(181, 137, 0, 0.1);
+  border-left: 3px solid #b58900;
 }
 
 button {

@@ -5,6 +5,7 @@ import {
   createPaymentIntent,
   type PaymentIntentStatus,
 } from '@/services/payment'
+import { release, tryAcquire } from '@/services/paymentLock'
 
 // Stripe Payment Intent status を EMVCo 3DS2 メッセージフローへマッピング。
 // frictionless: idle → preparing(AReq/ARes) → succeeded
@@ -46,54 +47,64 @@ export const usePaymentStore = defineStore('payment', () => {
 
   async function start({ amount, currency, stripe, card }: StartPaymentArgs) {
     reset()
+
+    // 別 tab で決済が in-flight ならここで弾く (重複決済防止)。
+    if (!tryAcquire()) {
+      fail('別 tab で決済処理中のため受け付けられません')
+      return
+    }
     phase.value = 'preparing'
 
-    let intent
     try {
-      intent = await createPaymentIntent({ amount, currency })
-    } catch (e) {
-      fail(e instanceof Error ? e.message : String(e))
-      return
-    }
-    paymentIntentId.value = intent.id
-    clientSecret.value = intent.client_secret
-
-    // handleActions: false で next_action を自動処理させず、status を明示的に検査する。
-    const confirmRes = await stripe.confirmCardPayment(
-      intent.client_secret,
-      { payment_method: { card } },
-      { handleActions: false },
-    )
-
-    if (confirmRes.error) {
-      fail(confirmRes.error.message ?? 'confirm に失敗')
-      return
-    }
-    if (!confirmRes.paymentIntent) {
-      fail('PaymentIntent が返却されませんでした')
-      return
-    }
-
-    finalStatus.value = confirmRes.paymentIntent.status as PaymentIntentStatus
-
-    if (finalStatus.value === 'requires_action') {
-      phase.value = 'challenging'
-      const challengeRes = await stripe.handleNextAction({
-        clientSecret: intent.client_secret,
-      })
-      if (challengeRes.error) {
-        fail(challengeRes.error.message ?? 'challenge に失敗')
+      let intent
+      try {
+        intent = await createPaymentIntent({ amount, currency })
+      } catch (e) {
+        fail(e instanceof Error ? e.message : String(e))
         return
       }
-      finalStatus.value =
-        (challengeRes.paymentIntent?.status as PaymentIntentStatus) ??
-        finalStatus.value
-    }
+      paymentIntentId.value = intent.id
+      clientSecret.value = intent.client_secret
 
-    if (finalStatus.value === 'succeeded') {
-      phase.value = 'succeeded'
-    } else {
-      fail(`想定外の最終 status: ${finalStatus.value}`)
+      // handleActions: false で next_action を自動処理させず、status を明示的に検査する。
+      const confirmRes = await stripe.confirmCardPayment(
+        intent.client_secret,
+        { payment_method: { card } },
+        { handleActions: false },
+      )
+
+      if (confirmRes.error) {
+        fail(confirmRes.error.message ?? 'confirm に失敗')
+        return
+      }
+      if (!confirmRes.paymentIntent) {
+        fail('PaymentIntent が返却されませんでした')
+        return
+      }
+
+      finalStatus.value = confirmRes.paymentIntent.status as PaymentIntentStatus
+
+      if (finalStatus.value === 'requires_action') {
+        phase.value = 'challenging'
+        const challengeRes = await stripe.handleNextAction({
+          clientSecret: intent.client_secret,
+        })
+        if (challengeRes.error) {
+          fail(challengeRes.error.message ?? 'challenge に失敗')
+          return
+        }
+        finalStatus.value =
+          (challengeRes.paymentIntent?.status as PaymentIntentStatus) ??
+          finalStatus.value
+      }
+
+      if (finalStatus.value === 'succeeded') {
+        phase.value = 'succeeded'
+      } else {
+        fail(`想定外の最終 status: ${finalStatus.value}`)
+      }
+    } finally {
+      release()
     }
   }
 

@@ -33,9 +33,13 @@ function intent(status: string, id = 'pi_test') {
   } as unknown as PaymentIntentResult
 }
 
+const PAYMENT_LOCK_KEY = '3ds2-demo:payment-lock'
+
 describe('payment store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    localStorage.clear()
+    vi.restoreAllMocks()
     vi.spyOn(paymentService, 'createPaymentIntent').mockResolvedValue({
       id: 'pi_test',
       client_secret: 'cs_test',
@@ -123,5 +127,26 @@ describe('payment store', () => {
     await store.start({ amount: 100, currency: 'jpy', stripe, card })
     expect(store.phase).toBe('failed')
     expect(store.errorMessage).toBe('auth failed')
+  })
+
+  it('別 tab で in-flight (lock 保持中) → 即 failed、API は呼ばれない', async () => {
+    localStorage.setItem(
+      PAYMENT_LOCK_KEY,
+      JSON.stringify({ tabId: 'other-tab-fixture', startedAt: Date.now() }),
+    )
+    const store = usePaymentStore()
+    const stripe = makeStripe({ confirm: intent('succeeded') })
+    await store.start({ amount: 100, currency: 'jpy', stripe, card })
+    expect(store.phase).toBe('failed')
+    expect(store.errorMessage).toMatch(/別 tab/)
+    expect(paymentService.createPaymentIntent).not.toHaveBeenCalled()
+    expect(stripe.confirmCardPayment).not.toHaveBeenCalled()
+  })
+
+  it('成功後は lock が解放される (次の決済を block しない)', async () => {
+    const store = usePaymentStore()
+    const stripe = makeStripe({ confirm: intent('succeeded') })
+    await store.start({ amount: 100, currency: 'jpy', stripe, card })
+    expect(localStorage.getItem(PAYMENT_LOCK_KEY)).toBeNull()
   })
 })
