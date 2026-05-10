@@ -18,7 +18,7 @@ export interface CreatePaymentIntentRequest {
 
 export interface PaymentIntentResponse {
   id: string
-  clientSecret: string
+  client_secret: string
   status: PaymentIntentStatus
 }
 

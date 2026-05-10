@@ -38,7 +38,7 @@ describe('payment store', () => {
     setActivePinia(createPinia())
     vi.spyOn(paymentService, 'createPaymentIntent').mockResolvedValue({
       id: 'pi_test',
-      clientSecret: 'cs_test',
+      client_secret: 'cs_test',
       status: 'requires_payment_method',
     })
   })

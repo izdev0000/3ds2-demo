@@ -56,11 +56,11 @@ export const usePaymentStore = defineStore('payment', () => {
       return
     }
     paymentIntentId.value = intent.id
-    clientSecret.value = intent.clientSecret
+    clientSecret.value = intent.client_secret
 
     // handleActions: false で next_action を自動処理させず、status を明示的に検査する。
     const confirmRes = await stripe.confirmCardPayment(
-      intent.clientSecret,
+      intent.client_secret,
       { payment_method: { card } },
       { handleActions: false },
     )
@@ -79,7 +79,7 @@ export const usePaymentStore = defineStore('payment', () => {
     if (finalStatus.value === 'requires_action') {
       phase.value = 'challenging'
       const challengeRes = await stripe.handleNextAction({
-        clientSecret: intent.clientSecret,
+        clientSecret: intent.client_secret,
       })
       if (challengeRes.error) {
         fail(challengeRes.error.message ?? 'challenge に失敗')
