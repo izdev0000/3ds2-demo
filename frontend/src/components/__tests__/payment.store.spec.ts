@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   PaymentIntentResult,
   Stripe,
-  StripeCardElement,
+  StripeCardNumberElement,
 } from '@stripe/stripe-js'
 import { usePaymentStore } from '@/stores/payment'
 import * as paymentService from '@/services/payment'
 
-const card = {} as StripeCardElement
+const card = {} as StripeCardNumberElement
 
 type ConfirmFn = Stripe['confirmCardPayment']
 type NextActionFn = Stripe['handleNextAction']

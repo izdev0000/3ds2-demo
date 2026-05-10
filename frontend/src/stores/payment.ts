@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Stripe, StripeCardElement } from '@stripe/stripe-js'
+import type { Stripe, StripeCardNumberElement } from '@stripe/stripe-js'
 import {
   createPaymentIntent,
   type PaymentIntentStatus,
@@ -21,7 +21,7 @@ export interface StartPaymentArgs {
   amount: number
   currency: string
   stripe: Stripe
-  card: StripeCardElement
+  card: StripeCardNumberElement
 }
 
 export const usePaymentStore = defineStore('payment', () => {

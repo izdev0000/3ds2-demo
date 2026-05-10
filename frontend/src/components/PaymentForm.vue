@@ -2,13 +2,17 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import type {
   Stripe,
-  StripeCardElement,
+  StripeCardCvcElement,
+  StripeCardExpiryElement,
+  StripeCardNumberElement,
   StripeElements,
 } from '@stripe/stripe-js'
 import { getStripe } from '@/services/stripe'
 import { usePaymentStore } from '@/stores/payment'
 
-const cardMount = ref<HTMLDivElement | null>(null)
+const numberMount = ref<HTMLDivElement | null>(null)
+const expiryMount = ref<HTMLDivElement | null>(null)
+const cvcMount = ref<HTMLDivElement | null>(null)
 const amount = ref<number>(100)
 const currency = ref<string>('jpy')
 const mountError = ref<string | null>(null)
@@ -18,7 +22,9 @@ const store = usePaymentStore()
 
 let stripe: Stripe | null = null
 let elements: StripeElements | null = null
-let card: StripeCardElement | null = null
+let cardNumber: StripeCardNumberElement | null = null
+let cardExpiry: StripeCardExpiryElement | null = null
+let cardCvc: StripeCardCvcElement | null = null
 
 onMounted(async () => {
   try {
@@ -27,30 +33,43 @@ onMounted(async () => {
     mountError.value = e instanceof Error ? e.message : String(e)
     return
   }
-  if (!stripe || !cardMount.value) {
+  if (!stripe || !numberMount.value || !expiryMount.value || !cvcMount.value) {
     mountError.value = 'Stripe.js の初期化に失敗しました'
     return
   }
   elements = stripe.elements()
-  card = elements.create('card')
-  card.mount(cardMount.value)
+  cardNumber = elements.create('cardNumber', {
+    placeholder: '4100 0000 0000 0100',
+  })
+  cardExpiry = elements.create('cardExpiry', {
+    placeholder: '12 / 40',
+  })
+  cardCvc = elements.create('cardCvc', {
+    placeholder: '123',
+  })
+  cardNumber.mount(numberMount.value)
+  cardExpiry.mount(expiryMount.value)
+  cardCvc.mount(cvcMount.value)
   isMounted.value = true
 })
 
 onBeforeUnmount(() => {
-  card?.unmount()
+  cardNumber?.unmount()
+  cardExpiry?.unmount()
+  cardCvc?.unmount()
 })
 
 async function submit() {
-  if (!stripe || !card) {
+  if (!stripe || !cardNumber) {
     mountError.value = 'Card Element が未準備です'
     return
   }
+  // confirmCardPayment は同一 Elements インスタンスの cardExpiry / cardCvc を自動連携。
   await store.start({
     amount: amount.value,
     currency: currency.value,
     stripe,
-    card,
+    card: cardNumber,
   })
 }
 </script>
@@ -73,9 +92,20 @@ async function submit() {
     </div>
 
     <label class="card-label">
-      カード番号 / 有効期限 / CVC
-      <div ref="cardMount" class="card-element"></div>
+      カード番号
+      <div ref="numberMount" class="card-element"></div>
     </label>
+
+    <div class="row">
+      <label class="card-label">
+        有効期限
+        <div ref="expiryMount" class="card-element"></div>
+      </label>
+      <label class="card-label">
+        CVC
+        <div ref="cvcMount" class="card-element"></div>
+      </label>
+    </div>
 
     <button
       type="submit"
@@ -102,6 +132,7 @@ async function submit() {
 }
 
 .row label {
+  flex: 1;
   display: flex;
   flex-direction: column;
   font-size: 0.85rem;
