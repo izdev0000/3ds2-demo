@@ -1,14 +1,41 @@
-# Claude Code 規約 — 3ds2-demo-php-laravel
+# Claude Code 規約 — 3ds2-demo
 
 本ファイルは Claude Code がこのリポジトリで作業する際の規約。マスターハンドアウト（`../CLAUDE.md`）を前提とし、本実装固有の事項のみ記載する。
 
 ## 位置づけ
 
 - 親: `../CLAUDE.md`（背景・キャリア戦略・NDA 制約・全体方針のマスター）
-- 本リポ: PHP/Laravel + Vue 3 + **Stripe TEST** の単一実装
-- 兄弟リポ予定: `3ds2-demo-java-spring` 等を後日追加
+- 本リポ: **Vue 3 frontend × Laravel 12 backend × Stripe TEST** の monorepo 実装
+- 構造方針: `frontend/` と `backend-*/` を sibling に配置、`docker-compose.yml` の profile で backend を切替
+- 拡張可能性: 別言語 backend（Java / Go 等）を追加できる設計だが、**現時点では実装予定なし**（README に「予定」を書かない方針）
 
 > Note: 当初は Adyen TEST を採用予定だったが、Adyen のセルフサービス TEST 登録が business メール / business website を必須とする仕様変更により利用不可と判明したため、Stripe へピボット。Stripe は gmail OK・instant 発行で同等の 3DS2 機能を持つため学習デモ要件を満たす。
+
+## ディレクトリ構造
+
+```
+3ds2-demo/
+├── README.md
+├── CLAUDE.md               # 本ファイル（トップ規約）
+├── LICENSE
+├── .gitignore
+├── docker-compose.yml      # profile 切替で backend 選択
+├── .env.example
+├── frontend/               # Vue 3 + TS + Vite + Stripe.js
+│   ├── package.json
+│   ├── src/
+│   └── CLAUDE.md           # frontend 固有規約（必要に応じて作成）
+├── backend-laravel/        # PHP 8.3 + Laravel 12 + Stripe PHP SDK
+│   ├── composer.json
+│   ├── src/
+│   └── CLAUDE.md           # Laravel 固有規約（必要に応じて作成）
+├── docker/                 # Dockerfile / nginx 設定等
+│   ├── frontend/
+│   └── backend-laravel/
+└── docs/                   # 3DS2 仕様解説（言語非依存）
+    ├── api-contract.yaml   # OpenAPI による API 契約定義
+    └── 3ds2-overview.md
+```
 
 ## 絶対 NG（NDA・法務）
 
@@ -20,16 +47,22 @@
 
 ## スタック（決定済み）
 
-- Backend: PHP 8.3 / Laravel 12 / Stripe PHP SDK (`stripe/stripe-php`)
 - Frontend: Vue 3 / TypeScript / Vite / Stripe.js (`@stripe/stripe-js`) + Stripe Elements
+- Backend: PHP 8.3 / Laravel 12 / Stripe PHP SDK (`stripe/stripe-php`)
 - DB: MySQL 8
-- Infra: Docker Compose
+- Infra: 自前 Dockerfile + docker-compose（Sail は monorepo と相性悪いため非採用）
+- Webhook ローカル受信: Stripe CLI（`stripe listen --forward-to host.docker.internal:8000/webhooks/stripe`）
 - CI: GitHub Actions
+- API contract: OpenAPI 3.x で `docs/api-contract.yaml` に定義
 
-## 未確定（決まり次第本ファイル更新）
+## アーキテクチャ原則
 
-- Docker 構成: Laravel Sail / 自前 docker-compose のどちらにするか
-- Vue 統合方式: Inertia.js（Laravel に同居）/ API + 分離 SPA のどちらにするか
+- **API contract 駆動**: OpenAPI で frontend ↔ backend の境界を明示。backend が他実装に差し替わっても frontend 不変
+- PSP 統合は **Adapter パターン**（`PaymentAdapterInterface` + `StripeAdapter` 実装、`AdyenAdapter` はインターフェースのみのスタブ）
+- Webhook は専用コントローラ、HMAC 署名検証必須（Stripe は `Stripe-Signature` ヘッダ）
+- トランザクション状態は明示的 State Machine（Stripe Payment Intent state ↔ EMVCo 3DS2 メッセージフロー AReq → ARes → CReq → CRes をマッピングして可視化）
+- Stripe は **Payment Intents API + `next_action` を明示的にハンドリング**（Stripe.js の自動 iframe 任せにせず、3DS2 challenge 経路を制御することで仕様理解の深さを示す）
+- `payment_method_options.card.request_three_d_secure: 'any'` で frictionless / challenge 両経路をテスト
 
 ## コーディング規約
 
@@ -37,14 +70,7 @@
 - TypeScript: strict mode、ESLint 必須
 - 外部 API（Stripe / Adyen 等）レスポンスは DTO へマッピングしてから利用
 - 秘密情報は `.env`、ハードコード禁止
-
-## アーキテクチャ原則
-
-- PSP 統合は Adapter パターン（`PaymentAdapterInterface` + `StripeAdapter` 実装、`AdyenAdapter` はインターフェースのみのスタブ）
-- Webhook は専用コントローラ、HMAC 署名検証必須（Stripe は `Stripe-Signature` ヘッダ）
-- トランザクション状態は明示的 State Machine（Stripe Payment Intent state ↔ EMVCo 3DS2 メッセージフロー AReq → ARes → CReq → CRes をマッピングして可視化）
-- Stripe は **Payment Intents API + `next_action` を明示的にハンドリング**（Stripe.js の自動 iframe 任せにせず、3DS2 challenge 経路を制御することで仕様理解の深さを示す）
-- `payment_method_options.card.request_three_d_secure: 'any'` で frictionless / challenge 両経路をテスト
+- API endpoint は OpenAPI 定義と一致させる（drift は CI で検出）
 
 ## コミット規約
 
@@ -71,4 +97,4 @@
 
 - Claude Code に任せる: ボイラープレート、DTO、テストケース、定型コード生成
 - 人間が判断: 仕様解釈、State Machine 設計、シナリオ分岐ロジック、アーキテクチャ判断
-- README に AI 活用の事実を明記（透明性のため）
+- README に AI 活用の事実を 1 行明記（透明性のため、ただし大々的なセクションは作らない）
