@@ -22,11 +22,11 @@ export interface PaymentIntentResponse {
   status: PaymentIntentStatus
 }
 
-const backendUrl = import.meta.env.VITE_BACKEND_URL
+const backendUrl = import.meta.env.VITE_BACKEND_ORIGIN
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!backendUrl) {
-    throw new Error('VITE_BACKEND_URL が未設定です')
+    throw new Error('VITE_BACKEND_ORIGIN が未設定です')
   }
   const res = await fetch(`${backendUrl}${path}`, {
     ...init,
