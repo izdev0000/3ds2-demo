@@ -1,22 +1,77 @@
 <script setup lang="ts">
-// TODO(Phase 5): 最終 status と webhook 反映の可視化。
+import { computed } from 'vue'
+import { usePaymentStore } from '@/stores/payment'
+
+const store = usePaymentStore()
+const isSuccess = computed(() => store.phase === 'succeeded')
 </script>
 
 <template>
-  <section class="result">
-    <h2>結果</h2>
-    <p class="placeholder">PaymentIntent 確定後の状態を表示</p>
+  <section class="result" :class="isSuccess ? 'ok' : 'ng'">
+    <h2>{{ isSuccess ? '✅ 成功' : '❌ 失敗' }}</h2>
+
+    <dl>
+      <template v-if="store.paymentIntentId">
+        <dt>PaymentIntent</dt>
+        <dd><code>{{ store.paymentIntentId }}</code></dd>
+      </template>
+      <template v-if="store.finalStatus">
+        <dt>最終 status</dt>
+        <dd><code>{{ store.finalStatus }}</code></dd>
+      </template>
+      <template v-if="store.errorMessage">
+        <dt>エラー</dt>
+        <dd>{{ store.errorMessage }}</dd>
+      </template>
+    </dl>
+
+    <button @click="store.reset()">最初に戻る</button>
   </section>
 </template>
 
 <style scoped>
 .result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
   padding: 1rem;
-  border: 1px dashed var(--color-border);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
 }
 
-.placeholder {
-  color: var(--color-text);
-  opacity: 0.6;
+.result.ok h2 {
+  color: #2a8;
+}
+
+.result.ng h2 {
+  color: #c00;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+dt {
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+code {
+  font-family: monospace;
+}
+
+button {
+  align-self: flex-start;
+  padding: 0.4rem 1rem;
+  cursor: pointer;
 }
 </style>

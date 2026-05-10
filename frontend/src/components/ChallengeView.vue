@@ -1,23 +1,51 @@
 <script setup lang="ts">
-// TODO(Phase 5): next_action.use_stripe_sdk / redirect_to_url のハンドリング。
-// EMVCo 3DS2 の CReq/CRes フェーズに相当。
+import { usePaymentStore } from '@/stores/payment'
+
+const store = usePaymentStore()
 </script>
 
 <template>
   <section class="challenge">
-    <h2>3DS2 チャレンジ</h2>
-    <p class="placeholder">PaymentIntent.next_action 受信時に inline / redirect 表示</p>
+    <h2>3DS2 チャレンジ実行中</h2>
+    <p>
+      カード発行会社の認証画面を表示しています（Stripe SDK が
+      iframe を制御）。EMVCo §6.5 CReq → CRes に相当。
+    </p>
+    <p v-if="store.paymentIntentId" class="meta">
+      PaymentIntent: <code>{{ store.paymentIntentId }}</code>
+    </p>
+    <div class="spinner" aria-label="loading"></div>
   </section>
 </template>
 
 <style scoped>
 .challenge {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
   padding: 1rem;
-  border: 1px dashed var(--color-border);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
 }
 
-.placeholder {
-  color: var(--color-text);
-  opacity: 0.6;
+.meta {
+  font-family: monospace;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.spinner {
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-text);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

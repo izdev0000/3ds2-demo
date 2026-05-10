@@ -1,4 +1,15 @@
-// TODO(Phase 3): docs/api-contract.yaml 確定後に OpenAPI 生成型へ差し替え
+// docs/api-contract.yaml で確定予定の暫定インターフェース。
+// backend (StripeAdapter) は PaymentIntent を作成し、client_secret を返す。
+// フロント側で stripe.confirmCardPayment / handleNextAction を明示的に呼ぶ。
+
+export type PaymentIntentStatus =
+  | 'requires_payment_method'
+  | 'requires_confirmation'
+  | 'requires_action'
+  | 'processing'
+  | 'requires_capture'
+  | 'canceled'
+  | 'succeeded'
 
 export interface CreatePaymentIntentRequest {
   amount: number
@@ -8,12 +19,15 @@ export interface CreatePaymentIntentRequest {
 export interface PaymentIntentResponse {
   id: string
   clientSecret: string
-  status: string
+  status: PaymentIntentStatus
 }
 
 const backendUrl = import.meta.env.VITE_BACKEND_URL
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (!backendUrl) {
+    throw new Error('VITE_BACKEND_URL が未設定です')
+  }
   const res = await fetch(`${backendUrl}${path}`, {
     ...init,
     headers: {
@@ -36,8 +50,7 @@ export function createPaymentIntent(
   })
 }
 
-export function confirmPaymentIntent(id: string): Promise<PaymentIntentResponse> {
-  return request<PaymentIntentResponse>(`/api/payments/${id}/confirm`, {
-    method: 'POST',
-  })
+// challenge 完了後 / webhook 反映後の最新 status 取得用。
+export function getPaymentIntent(id: string): Promise<PaymentIntentResponse> {
+  return request<PaymentIntentResponse>(`/api/payments/${id}`)
 }
