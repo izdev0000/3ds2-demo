@@ -12,6 +12,7 @@ use App\Models\Transaction;
 use App\Support\IdGenerator;
 use DateTimeImmutable;
 use LogicException;
+use RuntimeException;
 use Stripe\StripeClient;
 
 /**
@@ -23,8 +24,8 @@ use Stripe\StripeClient;
  *
  * 実装段階:
  *   - createPayment:           実装済み (Y3-2)
- *   - confirmPayment:          未実装 (Y3-4 で実装)
- *   - getPayment:              未実装 (Y3-4 で実装)
+ *   - confirmPayment:          実装済み (Y3-4)
+ *   - getPayment:              実装済み (Y3-4)
  *   - verifyWebhookSignature:  未実装 (Y3-5 で実装)
  */
 final class StripeAdapter implements PaymentAdapterInterface
@@ -73,12 +74,39 @@ final class StripeAdapter implements PaymentAdapterInterface
 
     public function confirmPayment(string $id, ConfirmPaymentRequest $request): PaymentResponse
     {
-        throw $this->notImplementedYet(__FUNCTION__);
+        $transaction = Transaction::query()->findOrFail($id);
+
+        if ($transaction->psp_payment_intent_id === null) {
+            throw new RuntimeException(sprintf(
+                'Transaction %s has no Stripe PaymentIntent linked.',
+                $id,
+            ));
+        }
+
+        $params = ['payment_method' => $request->paymentMethodId];
+        if ($request->returnUrl !== null) {
+            $params['return_url'] = $request->returnUrl;
+        }
+
+        // Stripe で confirm。3DS2 が必要なら status='requires_action' + next_action が返る。
+        $intent = $this->stripe->paymentIntents->confirm(
+            $transaction->psp_payment_intent_id,
+            $params,
+        );
+
+        $transaction->status = PaymentStatus::from($intent->status);
+        $transaction->next_action = $intent->next_action?->toArray();
+        $transaction->save();
+
+        return $this->toResponse($transaction);
     }
 
     public function getPayment(string $id): PaymentResponse
     {
-        throw $this->notImplementedYet(__FUNCTION__);
+        // DB をソースオブトゥルースとして扱う。webhook が status 同期を担保。
+        $transaction = Transaction::query()->findOrFail($id);
+
+        return $this->toResponse($transaction);
     }
 
     public function verifyWebhookSignature(string $payload, string $signature): void

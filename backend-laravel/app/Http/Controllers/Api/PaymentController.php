@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Adapters\PaymentAdapterInterface;
+use App\DTO\ConfirmPaymentRequest;
 use App\DTO\CreatePaymentRequest;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
@@ -17,8 +18,8 @@ use Illuminate\Http\Request;
  *
  * 実装段階:
  *   - create:   実装済み (Y3-3)
- *   - show:     未実装 (Y3-4)
- *   - confirm:  未実装 (Y3-4)
+ *   - show:     実装済み (Y3-4)
+ *   - confirm:  実装済み (Y3-4)
  *   - events:   未実装 (Y3-7)
  */
 final class PaymentController extends Controller
@@ -44,12 +45,22 @@ final class PaymentController extends Controller
 
     public function show(string $id): JsonResponse
     {
-        return $this->notImplemented(__FUNCTION__);
+        $response = $this->adapter->getPayment($id);
+
+        return response()->json($response->toArray());
     }
 
     public function confirm(Request $request, string $id): JsonResponse
     {
-        return $this->notImplemented(__FUNCTION__);
+        $validated = $request->validate([
+            'payment_method_id' => ['required', 'string'],
+            'return_url' => ['nullable', 'url'],
+        ]);
+
+        $dto = ConfirmPaymentRequest::fromArray($validated);
+        $response = $this->adapter->confirmPayment($id, $dto);
+
+        return response()->json($response->toArray());
     }
 
     public function events(string $id): JsonResponse
