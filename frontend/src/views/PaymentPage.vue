@@ -14,6 +14,11 @@ const isFormPhase = computed(
   () => store.phase === 'idle' || store.phase === 'preparing',
 )
 
+// 結果画面 (succeeded / failed) では tab を表示しない (操作不要なため)。
+const isTerminal = computed(
+  () => store.phase === 'succeeded' || store.phase === 'failed',
+)
+
 // 決済処理中は overlay で全操作を block する。
 // (タブ切替で in-flight 状態を破壊する race condition の防止が主目的)
 const isBusy = computed(() =>
@@ -37,7 +42,7 @@ const busyMessage = computed(() => {
 <template>
   <main class="payment-page">
     <h1>3DS2 Demo</h1>
-    <PaymentFlowTabs />
+    <PaymentFlowTabs v-if="!isTerminal" />
     <p class="phase">
       phase: {{ store.phase }} / flow: {{ store.currentFlow }}
     </p>
