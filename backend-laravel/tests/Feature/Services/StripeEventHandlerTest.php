@@ -42,6 +42,10 @@ final class StripeEventHandlerTest extends TestCase
         $tx = Transaction::query()->findOrFail('txn_test_succeed');
         $this->assertSame(PaymentStatus::SUCCEEDED, $tx->status);
         $this->assertNull($tx->next_action);
+
+        // Order が PENDING → PAID へ同期されること (docs/design/error-handling.md §8.4)。
+        $order = Order::query()->findOrFail($tx->order_id);
+        $this->assertSame(OrderStatus::PAID, $order->status);
     }
 
     public function test_payment_intent_requires_action_updates_status_and_next_action(): void

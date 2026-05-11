@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
+use App\Models\Order;
 use App\Models\Transaction;
 
 /**
@@ -69,6 +71,33 @@ final class StripeEventHandler
 
         $transaction->save();
 
+        // Order 状態の同期 (docs/design/error-handling.md §8.4)。
+        // 真値遷移は webhook 経由でのみ起こす。本 method は DB::transaction の中で
+        // 呼ばれる前提なので Transaction 更新と Order 更新は atomic に commit される。
+        $this->syncOrderStatus($transaction);
+
         return $internalId;
+    }
+
+    /**
+     * Transaction の最新状態を見て Order.status を同期する。
+     *
+     * - Transaction.SUCCEEDED かつ Order.PENDING → Order.PAID
+     * - payment_failed / canceled では Order は触らない (別カードで再決済可能)
+     * - 明示的キャンセル (Order.canceled) は別 API の責務
+     */
+    private function syncOrderStatus(Transaction $transaction): void
+    {
+        if ($transaction->status !== PaymentStatus::SUCCEEDED) {
+            return;
+        }
+
+        $order = Order::query()->find($transaction->order_id);
+        if ($order === null || $order->status !== OrderStatus::PENDING) {
+            return;
+        }
+
+        $order->status = OrderStatus::PAID;
+        $order->save();
     }
 }
