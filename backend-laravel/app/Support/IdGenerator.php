@@ -13,6 +13,8 @@ use Illuminate\Support\Str;
  * 接頭辞によりログ・DB ダンプ・障害調査時に ID 種別を一目で判別できる。
  *
  * 形式:
+ *   order:          "ord_" + ULID 26 桁
+ *   order item:     "oit_" + ULID 26 桁
  *   transaction:    "txn_" + ULID 26 桁  (例: txn_01HYZ80012345MNOPQRSTUVWX)
  *   webhook event:  "evt_" + ULID 26 桁
  *
@@ -20,6 +22,16 @@ use Illuminate\Support\Str;
  */
 final class IdGenerator
 {
+    public static function orderId(): string
+    {
+        return 'ord_'.(string) Str::ulid();
+    }
+
+    public static function orderItemId(): string
+    {
+        return 'oit_'.(string) Str::ulid();
+    }
+
     public static function transactionId(): string
     {
         return 'txn_'.(string) Str::ulid();
