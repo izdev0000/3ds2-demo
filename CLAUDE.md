@@ -58,7 +58,9 @@
 ## アーキテクチャ原則
 
 - **API contract 駆動**: OpenAPI で frontend ↔ backend の境界を明示。backend が他実装に差し替わっても frontend 不変
-- PSP 統合は **Adapter パターン**（`PaymentAdapterInterface` + `StripeAdapter` 実装、`AdyenAdapter` はインターフェースのみのスタブ）
+- PSP 統合は **Adapter パターン**（`PaymentAdapterInterface` + `StripeAdapter` 実装、`AdyenAdapter` はインターフェースのみのスタブ）。frontend 側も `services/psp.ts` で同等の DI ポイントを持ち、component は具体実装を import しない
+- **Order 駆動 (1 Order : N Transaction)**: 業務状態 (`orders.status`) と決済試行状態 (`transactions.status`) を分離。先に `pending` Order を作成し、`POST /api/payments` は `order_id` を必須にする。失敗時は同じ Order に新規 Transaction を紐付けて再決済を許容する
+- **webhook = single source of truth**: `payment_intent.succeeded` 受信時に DB transaction 内で Transaction + Order を atomic 更新する。frontend の confirm response や redirect 戻りは UX 用 hint で業務確定の根拠ではない（詳細は `docs/design/error-handling.md` §8.4 / `docs/design/order-lifecycle.md`）
 - Webhook は専用コントローラ、HMAC 署名検証必須（Stripe は `Stripe-Signature` ヘッダ）
 - トランザクション状態は明示的 State Machine（Stripe Payment Intent state ↔ EMVCo 3DS2 メッセージフロー AReq → ARes → CReq → CRes をマッピングして可視化）
 - Stripe は **Payment Intents API + `next_action` を明示的にハンドリング**（Stripe.js の自動 iframe 任せにせず、3DS2 challenge 経路を制御することで仕様理解の深さを示す）

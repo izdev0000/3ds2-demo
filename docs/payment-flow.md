@@ -2,39 +2,50 @@
 
 3DS2 決済フローを Mermaid 図で示す。Client SDK flow（iframe challenge）と Server Redirect flow（full-page redirect）の 2 系統。
 
+前提: 本デモは Order 駆動設計のため、決済の前段に **`POST /api/orders` で
+pending Order を作成** し、その `order_id` を `POST /api/payments` に渡す。
+Order と Transaction の分離は [architecture.md §5](./architecture.md#5-データモデル) /
+[design/order-lifecycle.md](./design/order-lifecycle.md) 参照。以下の図では
+Order 作成 step は省略している箇所がある (実装は `POST /api/orders` → `POST /api/payments`)。
+
 ## 全体構成図
 
 ```mermaid
 flowchart LR
     User([User])
     subgraph Frontend["Frontend - Vue 3"]
-        Form["PaymentForm.vue"]
+        OrderUI["OrderForm.vue (① カート)"]
+        CardUI["PaymentCardSection.vue (② 決済)"]
         Store["stores/payment.ts"]
-        StripeJS["StripePspClient.ts"]
+        StripeJS["StripePspClient.ts (via psp.ts)"]
         Return["PaymentReturn.vue"]
     end
     subgraph Backend["Backend - Laravel 12"]
-        Ctrl["PaymentController"]
+        OrderCtrl["OrderController"]
+        PayCtrl["PaymentController"]
         Adapter["StripeAdapter"]
         Webhook["WebhookController"]
         Handler["StripeEventHandler"]
-        DB[("Transaction / WebhookEvent")]
+        DB[("orders / order_items /<br/>transactions / webhook_events")]
     end
     Stripe["Stripe API"]
     Issuer["Issuer 3DS2"]
 
-    User --> Form --> Store
-    Store -->|"POST /api/payments"| Ctrl
-    Store -->|"POST /confirm"| Ctrl
+    User --> OrderUI --> Store
+    User --> CardUI --> Store
+    Store -->|"POST /api/orders"| OrderCtrl
+    Store -->|"POST /api/payments {order_id}"| PayCtrl
+    Store -->|"POST /confirm"| PayCtrl
     Store --> StripeJS
     StripeJS -.->|"confirmCardPayment / handleNextAction"| Stripe
-    Ctrl --> Adapter
+    OrderCtrl --> DB
+    PayCtrl --> Adapter
     Adapter -.->|"paymentIntents.create / confirm"| Stripe
     Stripe -.->|"3DS2 challenge"| Issuer
     Stripe -->|"webhook"| Webhook --> Handler --> DB
     Adapter --> DB
     Issuer -.->|"redirect return_url"| Return
-    Return -->|"GET /api/payments/{id}"| Ctrl
+    Return -->|"GET /api/payments/{id} + /api/orders/{id}"| PayCtrl
 ```
 
 ## Flow A: Client SDK Flow (frictionless / iframe challenge)
@@ -49,11 +60,12 @@ sequenceDiagram
     participant SA as Stripe API
     participant Iss as Issuer
 
-    User->>FE: submit (amount, card)
-    FE->>BE: POST /api/payments {amount, currency}
-    BE->>SA: paymentIntents.create<br/>(request_three_d_secure: any)
+    User->>FE: ① カートイン → ② 支払う (card)
+    Note over FE,BE: 事前に POST /api/orders で<br/>pending Order 作成済 (省略)
+    FE->>BE: POST /api/payments {order_id}
+    BE->>SA: paymentIntents.create<br/>(amount は Order から導出、<br/>request_three_d_secure: any)
     SA-->>BE: {id, client_secret, status}
-    BE-->>FE: {id, client_secret}
+    BE-->>FE: {id, order_id, client_secret}
 
     FE->>Stripe: confirmCardPayment<br/>(clientSecret, card, handleActions:false)
     Stripe->>SA: confirm PI
@@ -86,11 +98,12 @@ sequenceDiagram
     participant SA as Stripe API
     participant Iss as Issuer
 
-    User->>FE: submit (server_redirect)
-    FE->>BE: POST /api/payments
+    User->>FE: ① カートイン → ② submit (server_redirect)
+    Note over FE,BE: 事前に POST /api/orders 済
+    FE->>BE: POST /api/payments {order_id}
     BE->>SA: paymentIntents.create
     SA-->>BE: {id, client_secret}
-    BE-->>FE: {id, client_secret}
+    BE-->>FE: {id, order_id, client_secret}
 
     FE->>SJS: createPaymentMethod(card)
     SJS->>SA: tokenize card

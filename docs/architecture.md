@@ -138,28 +138,37 @@ stateDiagram-v2
 
 ## 4. 主要シーケンス
 
+frontend のデータフローの俯瞰は [`payment-flow.md`](./payment-flow.md) を参照。
+ここでは主に backend / Stripe / webhook の関係に焦点を当てる。
+
 ### 4.1 frictionless（3DS2 challenge 不要）
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant U as User
-    participant V as Vue (PaymentForm)
-    participant L as Laravel (PaymentController)
+    participant V as Vue (OrderForm + PaymentCardSection)
+    participant L as Laravel (Order/PaymentController)
     participant S as Stripe API
 
-    U->>V: カード情報入力
-    V->>L: POST /api/payments
-    L->>S: PaymentIntent 作成
+    U->>V: ① カート入力 → カートイン
+    V->>L: POST /api/orders { items, currency }
+    L->>L: INSERT orders(pending) + order_items
+    L-->>V: OrderResponse { id, amount, ... }
+
+    U->>V: ② カード情報入力 → 支払う
+    V->>L: POST /api/payments { order_id }
+    L->>S: PaymentIntent 作成 (amount は Order から導出)
     S-->>L: client_secret + status=requires_payment_method
+    L->>L: INSERT transactions(order_id, ...)
     L-->>V: PaymentResponse (client_secret)
     V->>S: stripe.confirmCardPayment(client_secret, {card})<br/>※ handleActions: false
     S-->>V: paymentIntent.status=succeeded
-    V-->>U: 成功画面
+    V-->>U: 成功画面 (Stripe 側の結果は hint)
 
-    Note over S,L: 並行して webhook 配送
+    Note over S,L: 業務確定は webhook が真値 (error-handling.md §8.4)
     S-)L: POST /api/webhooks/stripe<br/>(payment_intent.succeeded)
-    L->>L: 署名検証 + idempotency 検査<br/>+ Transaction.status 更新
+    L->>L: 署名検証 + idempotency 検査<br/>+ Transaction.status / Order.status を atomic 更新
 ```
 
 ### 4.2 challenge（3DS2 認証必要）
@@ -168,13 +177,17 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant U as User
-    participant V as Vue (PaymentForm/ChallengeView)
+    participant V as Vue (OrderForm + PaymentCardSection + ChallengeView)
     participant L as Laravel
     participant S as Stripe API
     participant ACS as Issuer ACS
 
-    U->>V: カード情報入力
-    V->>L: POST /api/payments
+    U->>V: ① カートイン
+    V->>L: POST /api/orders { items, currency }
+    L-->>V: OrderResponse { id, ... }
+
+    U->>V: ② カード情報入力 → 支払う
+    V->>L: POST /api/payments { order_id }
     L->>S: PaymentIntent 作成
     S-->>L: client_secret
     L-->>V: PaymentResponse
@@ -182,13 +195,13 @@ sequenceDiagram
     S-->>V: status=requires_action<br/>next_action=use_stripe_sdk
     V->>U: ChallengeView 表示
     V->>S: stripe.handleNextAction({clientSecret})
-    S->>ACS: 3DS2 CReq (Stripe.js が iframe で実施)
+    S->>ACS: 3DS2 CReq (PSP SDK が iframe で実施)
     ACS-->>U: 認証 UI
     U->>ACS: 認証情報入力
     ACS-->>S: 3DS2 CRes
     S-->>V: status=succeeded
     V-->>U: 成功画面
-    S-)L: webhook payment_intent.succeeded
+    S-)L: webhook payment_intent.succeeded<br/>(Transaction + Order を同期)
 ```
 
 ### 4.3 webhook idempotency
@@ -211,6 +224,7 @@ sequenceDiagram
     else 未処理
         W->>DB: BEGIN
         W->>DB: UPDATE transactions SET status,...<br/>(StripeEventHandler)
+        W->>DB: UPDATE orders SET status='paid'<br/>(succeeded の場合のみ、syncOrderStatus)
         W->>DB: INSERT webhook_events
         W->>DB: COMMIT
         W-->>S: 204
@@ -225,15 +239,38 @@ sequenceDiagram
 
 ```mermaid
 erDiagram
+    orders ||--o{ order_items : "1 : N"
+    orders ||--o{ transactions : "1 : N (再決済対応)"
     transactions ||--o{ webhook_events : "1 : N"
+    orders {
+        string id PK "ord_<ULID>"
+        string status "OrderStatus enum<br/>pending|paid|canceled|refunded"
+        bigint amount "items 合計の真値"
+        string currency
+        json metadata
+        timestamp created_at
+        timestamp updated_at
+    }
+    order_items {
+        string id PK "oit_<ULID>"
+        string order_id FK
+        string name
+        int quantity
+        bigint unit_price
+        timestamp created_at
+        timestamp updated_at
+    }
     transactions {
         string id PK "txn_<ULID>"
+        string order_id FK "紐づく Order"
+        string psp "stripe / adyen ..."
         string psp_payment_intent_id "pi_..."
         string client_secret
         string status "PaymentStatus enum"
-        bigint amount
+        bigint amount "Order.amount のスナップショット"
         string currency
         json next_action
+        json metadata
         timestamp created_at
         timestamp updated_at
     }
@@ -249,8 +286,10 @@ erDiagram
     }
 ```
 
-- `transactions.id` / `webhook_events.id` は接頭辞付き ULID（[`Support\IdGenerator`](../backend-laravel/app/Support/IdGenerator.php)）
+- 主キーは全て接頭辞付き ULID（[`Support\IdGenerator`](../backend-laravel/app/Support/IdGenerator.php)）
+- `orders.status` は業務状態、`transactions.status` は決済試行の状態。**両軸を分離**するのが本設計の核 (1 Order : N Transaction で同 Order 再決済が可能)
 - `webhook_events.psp_event_id` でユニーク制約（idempotency 担保）
+- `pending` の細分（離脱 / 失敗 / 処理中 / webhook 遅延）は [`design/order-lifecycle.md`](./design/order-lifecycle.md) §2 参照
 
 ---
 

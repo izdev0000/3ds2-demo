@@ -5,8 +5,6 @@ EMV 3-D Secure 2.x の統合学習デモ。**Vue 3 frontend × Laravel 12 backen
 > ⚠️ **Disclaimer**
 > 本リポジトリは Stripe 公式の資産ではありません。学習目的の個人プロジェクトであり、Stripe, Inc. および関連企業との提携・スポンサー関係はいっさいありません。本番環境での利用は想定しておらず、実際の決済導入には Stripe 公式ドキュメントおよび公式 SDK を直接参照してください。
 
-> 🚧 **WIP**: 現在開発中。
-
 > 🤖 本リポジトリは [Claude Code]を活用して開発しています。設計・仕様判断は人間、ボイラープレート / 型定義 / テストケース生成は AI に委譲。エージェント向けの規約は [CLAUDE.md](./CLAUDE.md) を参照。
 
 ---
@@ -44,11 +42,38 @@ frontend と backend は API contract（OpenAPI）で結合されており、bac
 
 - **Vue frontend × Laravel backend** を分離、`docker-compose` profile で backend を選択して起動
 - **API contract 駆動**: OpenAPI で frontend ↔ backend の境界を明示
-- **Adapter パターン**で PSP を抽象化（`StripeAdapter` 実動作 + `AdyenAdapter` はスタブのみ）
+- **Adapter パターン**で PSP を抽象化（`StripeAdapter` 実動作 + `AdyenAdapter` はスタブのみ、frontend 側も `services/psp.ts` 経由で binding 差替え可能）
+- **Order 駆動 + 業務状態 / 決済状態の分離**: 先に `pending` Order を作成して webhook で `paid` に同期。1 Order : N Transaction で同じ Order に対し別カードで再決済可能（詳細は [`docs/design/order-lifecycle.md`](./docs/design/order-lifecycle.md)）
+- **2 ステップ UX**: ① カート（OrderForm）→ ② 決済（PaymentCardSection）。webhook 真値遷移を学習対象として可視化
 - **Payment Intents API + `next_action` の明示的ハンドリング** を採用（Stripe.js の自動 iframe 任せにせず、3DS2 challenge 経路を制御）
 - `request_three_d_secure: 'any'` で frictionless / challenge 両経路を検証
-- **Webhook + HMAC 署名検証**（`Stripe-Signature`）を実装、実務感を反映
+- **Webhook + HMAC 署名検証**（`Stripe-Signature`）を実装、実務感を反映。webhook 受信時に Transaction + Order を atomic 同期
 - トランザクション状態は明示的な **State Machine** で管理（Stripe Payment Intent state ↔ EMVCo 3DS2 メッセージフロー AReq → ARes → CReq → CRes をマッピング）
+- **RecentRowsViewer** で `orders` / `order_items` / `transactions` / `webhook_events` の最新 5 行を 3 秒 polling 表示し、webhook 駆動のデータフローを画面で観察できる
+
+### 主要エンドポイント
+
+| Method | Path | 役割 |
+| --- | --- | --- |
+| `POST` | `/api/orders` | 仮注文を作成（`pending`）|
+| `GET` | `/api/orders/{id}` | Order 状態取得 |
+| `POST` | `/api/payments` | PaymentIntent 作成（`order_id` 必須）|
+| `GET` | `/api/payments/{id}` | Transaction 状態取得 |
+| `POST` | `/api/payments/{id}/confirm` | confirm（client_sdk / server_redirect）|
+| `GET` | `/api/payments/{id}/events` | webhook 履歴 |
+| `POST` | `/api/webhooks/stripe` | Stripe webhook 受信 |
+| `GET` | `/api/_debug/recent-rows` | 各テーブル最新 5 行（教育デモ用）|
+
+完全な契約は [`docs/api-contract.yaml`](./docs/api-contract.yaml)。
+
+### 設計 doc
+
+- [`docs/architecture.md`](./docs/architecture.md) — 全体構造・データモデル・主要シーケンス
+- [`docs/payment-flow.md`](./docs/payment-flow.md) — frontend ↔ backend ↔ Stripe のフロー図
+- [`docs/design/confirmation-flow.md`](./docs/design/confirmation-flow.md) — client_sdk / server_redirect 設計
+- [`docs/design/error-handling.md`](./docs/design/error-handling.md) — エラー分類・retry・webhook 真値方針
+- [`docs/design/order-lifecycle.md`](./docs/design/order-lifecycle.md) — pending Order の内訳と UI 表示ポリシー
+- [`docs/codegen-guide.md`](./docs/codegen-guide.md) — OpenAPI から型生成する手順
 
 ## 環境構築
 
@@ -195,7 +220,7 @@ docker compose exec stripe-cli stripe trigger payment_intent.requires_action
 ### Backend (PHP)
 
 ```bash
-# PHPUnit (MySQL test DB を RefreshDatabase で初期化、全 41 ケース)
+# PHPUnit (MySQL test DB を RefreshDatabase で初期化、全 46 ケース)
 docker compose exec backend-laravel php artisan test
 
 # Pint: コードスタイル check (dry-run)

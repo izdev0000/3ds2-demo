@@ -86,6 +86,11 @@ paths:
     get:
       tags: [orders]
       summary: Order の現在状態を取得
+      description: |
+        内部 ID から Order の現在状態と明細を返す。`status` は業務状態
+        (pending / paid / canceled / refunded)。webhook 経由でのみ paid に
+        遷移するため、決済直後でも未反映の場合は pending のままになる
+        (詳細は docs/design/order-lifecycle.md §2)。
       operationId: getOrder
       parameters:
         - $ref: '#/components/parameters/OrderIdPath'
@@ -202,6 +207,7 @@ paths:
                   summary: 3DS2 challenge が必要な場合
                   value:
                     id: txn_01HYZ800
+                    order_id: ord_01HYZ800
                     psp_payment_intent_id: pi_3RT...
                     client_secret: pi_3RT..._secret_xyz
                     status: requires_action
@@ -217,6 +223,7 @@ paths:
                   summary: フリクションレスで成功した場合
                   value:
                     id: txn_01HYZ801
+                    order_id: ord_01HYZ800
                     psp_payment_intent_id: pi_3RT...
                     client_secret: pi_3RT..._secret_xyz
                     status: succeeded

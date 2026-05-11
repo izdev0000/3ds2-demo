@@ -216,6 +216,8 @@ mask の二重防御は config / log channel 側で。
 
 - `Transaction.status` と Stripe 側 `PaymentIntent.status` のずれを定期チェック（本デモではスコープ外）
 - 万一ずれていたら `Log::critical('payment status drift', [...])` + 管理者通知（実装する場合）
+- `Order.status` の `pending` には複数の意味（離脱 / 失敗 / 処理中 / webhook 遅延）
+  が含まれるため、内訳分類と UI 表示ポリシーは [order-lifecycle.md](./order-lifecycle.md) §2 / §3 を参照
 
 ## 9. Frontend 側の取り扱い
 
@@ -278,6 +280,7 @@ mask の二重防御は config / log channel 側で。
 
 ## 13. 関連設計
 
-- `docs/design/confirmation-flow.md`: 両 flow の責務分担とエラー時挙動の前提
-- `docs/architecture.md`: 全体構造とエラーが流れる経路
-- `docs/api-contract.yaml`: `Error` schema の本体
+- [confirmation-flow.md](./confirmation-flow.md): 両 flow の責務分担とエラー時挙動の前提
+- [order-lifecycle.md](./order-lifecycle.md): pending Order の内訳と UI 表示ポリシー (本 doc §8.3 から派生)
+- [../architecture.md](../architecture.md): 全体構造とエラーが流れる経路
+- [../api-contract.yaml](../api-contract.yaml): `Error` schema の本体

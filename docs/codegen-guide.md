@@ -39,7 +39,9 @@ type CreatePaymentRequest = components['schemas']['CreatePaymentRequest']
 type PaymentResponse = components['schemas']['PaymentResponse']
 type PaymentStatus = components['schemas']['PaymentStatus']
 
-const body: CreatePaymentRequest = { amount: 1000, currency: 'jpy' }
+// PaymentIntent 作成は事前に作成済の Order に紐付ける (amount/currency は
+// Order から導出するため client では送らない)。
+const body: CreatePaymentRequest = { order_id: 'ord_01HYZ800' }
 const res = await fetch('/api/payments', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },

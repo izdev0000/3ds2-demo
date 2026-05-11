@@ -276,15 +276,25 @@ flow 非依存に動くことを確認する。
    GET /api/payments/{id}/events で時系列に取得できる
 ```
 
-## 8. 未決定 / 後続検討項目
+## 8. 後続検討項目
 
-- `PaymentReturn.vue` で `?payment_intent` から内部 ID を逆引きする方法
-  - **案 A**: backend に `GET /api/payments/by-stripe-id/{pi_xxx}` を追加
-  - **案 B**: redirect 前に `localStorage` に内部 ID を保存しておく（frontend 完結）
-  - **案 C**: `return_url` に内部 ID を query string で含める（例: `?txn=txn_xxx`）→ Stripe が
-    そのままパススルーするか要確認
-  - 推奨: C（実装軽量、stateless）。動かなければ B（localStorage）。
-- `Adapter::supportedConfirmationFlows()` を本当に追加するか
-  - 必要性が薄ければ削減（現状 Stripe しか実装しないなら、interface に乗せず
-    Stripe 固有の判定でも良い）
-  - 後段で「Adyen を本格実装」する時に判断
+### 8.1 PaymentReturn.vue での内部 ID 逆引き → **実装済**
+
+`?payment_intent` から内部 transaction ID を逆引きするための 3 案を検討し、
+**案 C（return_url に query 付与）を主、案 B（sessionStorage）をフォールバック**
+として両方実装済 ([`stores/payment.ts`](../../frontend/src/stores/payment.ts) /
+[`views/PaymentReturn.vue`](../../frontend/src/views/PaymentReturn.vue)):
+
+- **案 C (実装済)**: `return_url` に `?txn=txn_xxx` を付与して Stripe をパススルー
+  - frontend 側で URL を組み立て、Stripe が変更せずに issuer 経由で戻すことを期待
+- **案 B (実装済、フォールバック)**: `sessionStorage` に `redirect-txn-id` キーで内部 ID を保存
+  - 案 C が動かない場合（Stripe の挙動次第）の保険として併用
+- 案 A (`GET /api/payments/by-stripe-id/{pi_xxx}`) は実装せず
+
+`PaymentReturn` は query → sessionStorage の順で内部 ID を解決し、
+`GET /api/payments/{id}` で結果を取得する。
+
+### 8.2 Adapter::supportedConfirmationFlows() の要否
+
+現状 Stripe のみ実装で Adyen はスタブのため、interface への追加は見送り。
+Adyen を本格実装する段階で再検討する。
