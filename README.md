@@ -55,7 +55,24 @@ frontend と backend は API contract（OpenAPI）で結合されており、bac
 ### 前提
 
 - Docker + Docker Compose
-- Stripe TEST アカウント（[Stripe Dashboard](https://dashboard.stripe.com/register) で gmail で即時発行可能）
+- Stripe TEST アカウント（下記手順で gmail のみで即時発行可能、business website / 法人情報は不要）
+
+### Stripe アカウントと API key の準備
+
+1. [Stripe Dashboard 登録ページ](https://dashboard.stripe.com/register) で gmail だけでアカウントを発行
+2. 登録直後は **TEST mode** で開く（ダッシュボード右上のトグルが「テストモード」になっていることを確認）。本番化（Activate）は不要、TEST mode のままで全機能を試せる
+3. 左サイドバー **Developers → API keys** を開く
+   - **Publishable key**: `pk_test_...` が表示されている。クリックでコピー
+   - **Secret key**: 「**Reveal test key**」ボタンを押すと `sk_test_...` が表示される。クリックでコピー
+4. 取得した 2 つの key を `.env` に転記
+   - `.env` (root) の `STRIPE_API_KEY=sk_test_...` と `STRIPE_PUBLISHABLE_KEY=pk_test_...`
+   - `backend-laravel/.env` の `STRIPE_SECRET_KEY=sk_test_...`（root の `STRIPE_API_KEY` と同じ値）
+
+> 💡 **なぜ secret key を 2 箇所に書くか**: compose の root `.env` は `stripe-cli` コンテナと frontend コンテナにのみ渡され、backend-laravel コンテナへは渡らない設計です。backend は `backend-laravel/.env` を直接読むため、同じ secret key を 2 箇所に書く運用になっています。
+>
+> 詳細は後述の「**Stripe key の整理**」テーブル参照。
+
+> 🔐 取得した key は誰にも見せないこと（漏洩した場合は Dashboard で即 roll する）。`.env` は `.gitignore` 済なのでコミットされません。
 
 ### 手順
 
@@ -69,8 +86,9 @@ cp .env.example .env
 cp backend-laravel/.env.example backend-laravel/.env
 ```
 
-3. Stripe TEST の secret key を `backend-laravel/.env` の `STRIPE_SECRET_KEY` に設定
-   （Dashboard → Developers → API keys から `sk_test_...` をコピー）
+3. Stripe TEST の API key 系を 2 つの `.env` に転記する（下記「Stripe key の整理」参照）
+   - `.env` (root, compose 用) に `STRIPE_API_KEY` (`sk_test_...`) / `STRIPE_PUBLISHABLE_KEY` (`pk_test_...`)
+   - `backend-laravel/.env` に `STRIPE_SECRET_KEY` (`sk_test_...`、上記 `STRIPE_API_KEY` と**同じ値**)
 
 ```bash
 # 4. Docker Compose 起動 (backend profile で全サービスを立ち上げ)
@@ -86,20 +104,76 @@ docker compose --profile laravel up -d
 | `frontend` | Vite dev server |
 | `stripe-cli` | webhook を `/api/webhooks/stripe` へ forward |
 
-```bash
-# 5. webhook signing secret を取得して backend-laravel/.env の
-#    STRIPE_WEBHOOK_SECRET に転記、その後 backend を restart
-docker compose logs stripe-cli | grep -i "webhook signing secret"
-docker compose restart backend-laravel
+**5. webhook signing secret (`whsec_...`) を `stripe-cli` ログから取得**
 
-# 6. APP_KEY 生成 + DB マイグレーション
+`stripe-cli` コンテナは起動時に Stripe にログインし、その session 専用の webhook signing secret を発行してログ出力します（CLI 経由の listen は Dashboard と別系統の whsec を使う）。
+
+```bash
+docker compose logs stripe-cli | grep -i "webhook signing secret"
+```
+
+出力例:
+```
+Ready! You are using Stripe API Version [...]. Your webhook signing secret is whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxx (^C to quit)
+```
+
+`whsec_...` 部分をコピーして `backend-laravel/.env` に貼り付け、backend を再起動:
+
+```bash
+# backend-laravel/.env を編集:
+#   STRIPE_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# その後:
+docker compose restart backend-laravel
+```
+
+**6. APP_KEY 生成 + DB マイグレーション**
+
+```bash
 docker compose exec backend-laravel php artisan key:generate
 docker compose exec backend-laravel php artisan migrate
 ```
 
-7. ブラウザで動作確認
-   - frontend: http://localhost:5173
-   - backend health: http://localhost:8000/up
+**7. ブラウザで動作確認**
+
+- frontend: http://localhost:5173
+- backend health: http://localhost:8000/up
+
+決済を試行すると `docker compose logs stripe-cli` に webhook 配送ログが流れる:
+
+```
+--> payment_intent.succeeded [evt_xxx]
+<-- [204] POST http://nginx:80/api/webhooks/stripe [evt_xxx]   ← 成功
+<-- [400] POST http://nginx:80/api/webhooks/stripe [evt_xxx]   ← 署名失敗
+```
+
+> ⚠️ **`stripe-cli` を再起動すると `whsec_...` が再発行される** ため、コンテナを起動し直したら毎回 step 5 をやり直してください（学習デモのため自動化していません）。webhook が `400` を返す場合の典型原因はこの不一致です。
+
+### stripe-cli の便利コマンド（任意）
+
+frontend / カード入力を介さずに webhook を直接発火できます（state machine の動作確認に有用）:
+
+```bash
+# 任意の event を Stripe に投げて webhook を発火
+docker compose exec stripe-cli stripe trigger payment_intent.succeeded
+docker compose exec stripe-cli stripe trigger payment_intent.payment_failed
+docker compose exec stripe-cli stripe trigger payment_intent.requires_action
+```
+
+これらは Stripe の test fixture を使った擬似 event で、実際に Stripe 側で PaymentIntent が作られて webhook が forward されます。我々の DB に該当 Transaction が無い場合は `StripeEventHandler` が no-op で返す（[StripeEventHandler.php:58](backend-laravel/app/Services/StripeEventHandler.php#L58)）ことの確認にも使えます。
+
+### Stripe key の整理
+
+3 種類の key を 2 つの env ファイルに配置します。**用途と prefix を取り違えると webhook 検証や API call が失敗する** ため整理:
+
+| 環境変数 | 値の例 | 配置先 | 用途 |
+| --- | --- | --- | --- |
+| `STRIPE_API_KEY` | `sk_test_...` | `.env` (root) | `stripe-cli` が Stripe にログインするための secret key |
+| `STRIPE_PUBLISHABLE_KEY` | `pk_test_...` | `.env` (root) | frontend (Stripe.js) が Elements を初期化する公開 key |
+| `STRIPE_SECRET_KEY` | `sk_test_...` (上と同値) | `backend-laravel/.env` | Laravel が Stripe API を叩く secret key |
+| `STRIPE_WEBHOOK_SECRET` | `whsec_...` | `backend-laravel/.env` | **受信した webhook の HMAC 署名を検証する別物の鍵**。step 5 で取得 |
+
+- `sk_test_...` と `whsec_...` は **完全に別の鍵**。値を入れ替えると webhook が常に 400 を返します
+- compose env (root `.env`) は `stripe-cli` / frontend コンテナにだけ渡され、backend-laravel コンテナへは渡らない（backend は `backend-laravel/.env` を直接読む）ため、secret key を 2 箇所に書く運用になっています
 
 ### Stripe テストカード
 
