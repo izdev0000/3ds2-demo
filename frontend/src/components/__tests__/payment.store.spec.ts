@@ -40,6 +40,7 @@ describe('payment store', () => {
     vi.restoreAllMocks()
     vi.spyOn(paymentService, 'createPaymentIntent').mockResolvedValue({
       id: 'pi_test',
+      order_id: 'ord_test',
       client_secret: 'cs_test',
       status: 'requires_payment_method',
     })
@@ -64,7 +65,7 @@ describe('payment store', () => {
   it('frictionless: PspClient が succeeded を返したら phase = succeeded', async () => {
     const store = usePaymentStore()
     const psp = makeFakePsp()
-    await store.start({ amount: 100, currency: 'jpy', psp, card })
+    await store.start({ orderId: 'ord_test', psp, card })
     expect(store.phase).toBe('succeeded')
     expect(store.finalStatus).toBe('succeeded')
   })
@@ -72,7 +73,7 @@ describe('payment store', () => {
   it('challenge: onChallenge 通知 → phase = challenging を経て succeeded', async () => {
     const store = usePaymentStore()
     const psp = makeFakePsp({ triggerChallenge: true })
-    await store.start({ amount: 100, currency: 'jpy', psp, card })
+    await store.start({ orderId: 'ord_test', psp, card })
     expect(store.phase).toBe('succeeded')
   })
 
@@ -81,7 +82,7 @@ describe('payment store', () => {
     const psp = makeFakePsp({
       confirm: { kind: 'failed', message: 'card declined' },
     })
-    await store.start({ amount: 100, currency: 'jpy', psp, card })
+    await store.start({ orderId: 'ord_test', psp, card })
     expect(store.phase).toBe('failed')
     expect(store.errorMessage).toBe('card declined')
   })
@@ -92,7 +93,7 @@ describe('payment store', () => {
     )
     const store = usePaymentStore()
     const psp = makeFakePsp()
-    await store.start({ amount: 100, currency: 'jpy', psp, card })
+    await store.start({ orderId: 'ord_test', psp, card })
     expect(store.phase).toBe('failed')
     expect(store.errorMessage).toBe('500 backend down')
     expect(psp.confirmAndChallenge).not.toHaveBeenCalled()
@@ -105,7 +106,7 @@ describe('payment store', () => {
     )
     const store = usePaymentStore()
     const psp = makeFakePsp()
-    await store.start({ amount: 100, currency: 'jpy', psp, card })
+    await store.start({ orderId: 'ord_test', psp, card })
     expect(store.phase).toBe('failed')
     expect(store.errorMessage).toMatch(/別 tab/)
     expect(paymentService.createPaymentIntent).not.toHaveBeenCalled()
@@ -115,7 +116,7 @@ describe('payment store', () => {
   it('成功後は lock が解放される (次の決済を block しない)', async () => {
     const store = usePaymentStore()
     const psp = makeFakePsp()
-    await store.start({ amount: 100, currency: 'jpy', psp, card })
+    await store.start({ orderId: 'ord_test', psp, card })
     expect(localStorage.getItem(PAYMENT_LOCK_KEY)).toBeNull()
   })
 
@@ -123,8 +124,7 @@ describe('payment store', () => {
     const store = usePaymentStore()
     const psp = makeFakePsp()
     await store.start({
-      amount: 100,
-      currency: 'jpy',
+      orderId: 'ord_test',
       psp,
       paymentMethodId: 'pm_card_visa',
     })
@@ -148,6 +148,7 @@ describe('payment store', () => {
         .spyOn(paymentService, 'confirmPayment')
         .mockResolvedValue({
           id: 'pi_test',
+          order_id: 'ord_test',
           client_secret: 'cs_test',
           status: 'requires_action',
           amount: 100,
@@ -162,8 +163,7 @@ describe('payment store', () => {
         .mockImplementation(() => {})
 
       await store.start({
-        amount: 100,
-        currency: 'jpy',
+        orderId: 'ord_test',
         psp,
         card,
         flow: 'server_redirect',
@@ -189,6 +189,7 @@ describe('payment store', () => {
       const psp = makeFakePsp()
       vi.spyOn(paymentService, 'confirmPayment').mockResolvedValue({
         id: 'pi_test',
+        order_id: 'ord_test',
         client_secret: 'cs_test',
         status: 'succeeded',
         amount: 100,
@@ -198,8 +199,7 @@ describe('payment store', () => {
       vi.spyOn(navigation, 'redirect').mockImplementation(() => {})
 
       await store.start({
-        amount: 100,
-        currency: 'jpy',
+        orderId: 'ord_test',
         psp,
         paymentMethodId: 'pm_card_visa',
         flow: 'server_redirect',
@@ -218,6 +218,7 @@ describe('payment store', () => {
       const psp = makeFakePsp()
       vi.spyOn(paymentService, 'confirmPayment').mockResolvedValue({
         id: 'pi_test',
+        order_id: 'ord_test',
         client_secret: 'cs_test',
         status: 'succeeded',
         amount: 100,
@@ -229,8 +230,7 @@ describe('payment store', () => {
         .mockImplementation(() => {})
 
       await store.start({
-        amount: 100,
-        currency: 'jpy',
+        orderId: 'ord_test',
         psp,
         paymentMethodId: 'pm_card_visa',
         flow: 'server_redirect',
@@ -250,8 +250,7 @@ describe('payment store', () => {
         .mockResolvedValue({} as never)
 
       await store.start({
-        amount: 100,
-        currency: 'jpy',
+        orderId: 'ord_test',
         psp,
         paymentMethodId: 'pm_card_visa',
         flow: 'server_redirect',
@@ -270,8 +269,7 @@ describe('payment store', () => {
       )
 
       await store.start({
-        amount: 100,
-        currency: 'jpy',
+        orderId: 'ord_test',
         psp,
         paymentMethodId: 'pm_card_visa',
         flow: 'server_redirect',
@@ -288,6 +286,7 @@ describe('payment store', () => {
       const psp = makeFakePsp()
       vi.spyOn(paymentService, 'confirmPayment').mockResolvedValue({
         id: 'pi_test',
+        order_id: 'ord_test',
         client_secret: 'cs_test',
         status: 'succeeded',
         amount: 100,
@@ -296,8 +295,7 @@ describe('payment store', () => {
       })
 
       await store.start({
-        amount: 100,
-        currency: 'jpy',
+        orderId: 'ord_test',
         psp,
         paymentMethodId: 'pm_card_visa',
         returnUrl: RETURN_URL,

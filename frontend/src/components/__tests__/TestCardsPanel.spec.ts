@@ -4,6 +4,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import TestCardsPanel from '@/components/TestCardsPanel.vue'
 import * as StripePspClientModule from '@/services/StripePspClient'
 import { usePaymentStore } from '@/stores/payment'
+import type { OrderResponse } from '@/services/order'
+
+// TestCardsPanel は注文確定済の Order を hub に複数 Transaction を試す動線。
+// テストでは store.order に固定 fixture を流し込んで「① 確定済」状態を再現する。
+const FIXTURE_ORDER: OrderResponse = {
+  id: 'ord_test',
+  status: 'pending',
+  amount: 100,
+  currency: 'jpy',
+  items: [
+    {
+      id: 'oit_test',
+      name: 'Demo item',
+      quantity: 1,
+      unit_price: 100,
+      subtotal: 100,
+    },
+  ],
+  metadata: null,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+}
 
 describe('TestCardsPanel', () => {
   let writeText: ReturnType<typeof vi.fn<(s: string) => Promise<void>>>
@@ -64,6 +86,7 @@ describe('TestCardsPanel', () => {
 
   it('「実行」押下で store.start が currentFlow=client_sdk + paymentMethodId で呼ばれる (flow デフォルト)', async () => {
     const store = usePaymentStore()
+    store.order = FIXTURE_ORDER
     const startSpy = vi
       .spyOn(store, 'start')
       .mockResolvedValue(undefined as unknown as void)
@@ -71,10 +94,10 @@ describe('TestCardsPanel', () => {
     const wrapper = mount(TestCardsPanel)
     const executeButton = wrapper.find('li').find('button.primary')
     await executeButton.trigger('click')
+    await flushPromises()
 
     expect(startSpy).toHaveBeenCalledWith({
-      amount: 100,
-      currency: 'jpy',
+      orderId: 'ord_test',
       psp: StripePspClientModule.stripePspClient,
       paymentMethodId: 'pm_card_visa',
       flow: 'client_sdk',
@@ -84,6 +107,7 @@ describe('TestCardsPanel', () => {
 
   it('currentFlow=server_redirect の時は returnUrl 付きで start を呼ぶ', async () => {
     const store = usePaymentStore()
+    store.order = FIXTURE_ORDER
     store.currentFlow = 'server_redirect'
     const startSpy = vi
       .spyOn(store, 'start')
@@ -92,6 +116,7 @@ describe('TestCardsPanel', () => {
     const wrapper = mount(TestCardsPanel)
     const executeButton = wrapper.find('li').find('button.primary')
     await executeButton.trigger('click')
+    await flushPromises()
 
     expect(startSpy).toHaveBeenCalledWith(
       expect.objectContaining({

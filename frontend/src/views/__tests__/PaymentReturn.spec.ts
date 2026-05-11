@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 import PaymentReturn from '@/views/PaymentReturn.vue'
 import * as paymentService from '@/services/payment'
+import * as orderService from '@/services/order'
 
 const REDIRECT_TXN_KEY = 'redirect-txn-id'
 
@@ -28,6 +29,9 @@ describe('PaymentReturn', () => {
   beforeEach(() => {
     sessionStorage.clear()
     vi.restoreAllMocks()
+    // Order 取得は fetch 経由なので test 環境では即時 reject させる。
+    // 取得失敗は View 側で catch されて payment 表示には影響しない仕様。
+    vi.spyOn(orderService, 'getOrder').mockRejectedValue(new Error('no order'))
   })
 
   afterEach(() => {
@@ -39,6 +43,7 @@ describe('PaymentReturn', () => {
       .spyOn(paymentService, 'getPaymentIntent')
       .mockResolvedValue({
         id: 'pi_test',
+        order_id: 'ord_test',
         client_secret: 'cs_test',
         status: 'succeeded',
         amount: 100,
@@ -60,6 +65,7 @@ describe('PaymentReturn', () => {
       .spyOn(paymentService, 'getPaymentIntent')
       .mockResolvedValue({
         id: 'pi_fallback',
+        order_id: 'ord_fallback',
         client_secret: 'cs',
         status: 'succeeded',
         amount: 200,
