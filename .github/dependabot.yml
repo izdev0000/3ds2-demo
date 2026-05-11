@@ -37,6 +37,10 @@ updates:
       - ci
 
   # Docker base image の更新 (backend / frontend それぞれの Dockerfile)
+  # 注: 本リポの CI は Dockerfile 変更を path filter 対象に含めていないため、
+  # base image bump の自動 validation が走らない。学習デモは「動く構成を
+  # 凍結」する方針で、major bump は ignore して手動更新の運用にする。
+  # security update は ignore 対象外なので別途配信される。
   - package-ecosystem: docker
     directory: /docker/backend-laravel
     schedule:
@@ -45,6 +49,9 @@ updates:
     labels:
       - dependencies
       - docker
+    ignore:
+      - dependency-name: "php"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: docker
     directory: /docker/frontend
@@ -54,3 +61,6 @@ updates:
     labels:
       - dependencies
       - docker
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
