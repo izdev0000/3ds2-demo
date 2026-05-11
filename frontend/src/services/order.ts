@@ -1,6 +1,8 @@
 // docs/api-contract.yaml の Order 関連スキーマを反映。
 // 暫定インターフェース。将来 openapi-typescript 等で型自動生成する想定。
 
+import { useScenarioStore } from '@/stores/scenario'
+
 export type OrderStatus = 'pending' | 'paid' | 'canceled' | 'refunded'
 
 export interface OrderItemInput {
@@ -51,6 +53,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function createOrder(body: CreateOrderRequest): Promise<OrderResponse> {
+  const scenario = useScenarioStore()
+  if (scenario.current === 'order_create_500') {
+    return Promise.reject(
+      new Error('Simulated: 500 Internal Server Error (POST /api/orders)'),
+    )
+  }
   return request<OrderResponse>('/api/orders', {
     method: 'POST',
     body: JSON.stringify(body),
@@ -58,5 +66,14 @@ export function createOrder(body: CreateOrderRequest): Promise<OrderResponse> {
 }
 
 export function getOrder(id: string): Promise<OrderResponse> {
+  const scenario = useScenarioStore()
+  // webhook_delay: 遅延中は実 backend 結果を返さず、pending を強制する。
+  // (実際は webhook が来ていない状態を frontend 側でエミュレート)
+  if (scenario.current === 'webhook_delay') {
+    return request<OrderResponse>(`/api/orders/${id}`).then((order) => ({
+      ...order,
+      status: 'pending',
+    }))
+  }
   return request<OrderResponse>(`/api/orders/${id}`)
 }

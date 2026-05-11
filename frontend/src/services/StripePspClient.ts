@@ -14,6 +14,7 @@ import type {
   MountedCardForm,
   PspClient,
 } from './PspClient'
+import { useScenarioStore } from '@/stores/scenario'
 
 export class StripePspClient implements PspClient {
   private stripePromise: Promise<Stripe | null> | null = null
@@ -81,6 +82,16 @@ export class StripePspClient implements PspClient {
   }
 
   async confirmAndChallenge(args: ConfirmAndChallengeArgs): Promise<ConfirmResult> {
+    // 教育デモ scenario: Stripe API 自体が 5xx を返すケースを再現する。
+    // 実際のネットワークは触らず frontend mock で reject する。
+    const scenario = useScenarioStore()
+    if (scenario.current === 'stripe_5xx') {
+      return {
+        kind: 'failed',
+        message: 'Simulated: Stripe API 5xx (confirm)',
+      }
+    }
+
     // paymentMethodId 指定時は Elements を経由せず、Stripe の test PM alias 等を
     // 直接渡して confirm する (TestCardsPanel からの 1-click 実行)。
     // ただし init は事前に必要なため、未初期化なら自前で行う。
