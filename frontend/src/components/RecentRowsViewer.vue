@@ -219,6 +219,13 @@ header h3 {
   font-size: 0.8rem;
 }
 
+/* 「再取得」/「取得中…」で文字幅が変わって header が左右に揺れるのを防ぐため、
+   button に固定幅を与える。 */
+.controls button {
+  min-width: 6.5em;
+  text-align: center;
+}
+
 .toggle {
   display: inline-flex;
   align-items: center;
