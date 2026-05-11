@@ -181,14 +181,5 @@ code {
   font-size: 0.85rem;
 }
 
-button {
-  align-self: flex-start;
-  padding: 0.4rem 1rem;
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
+/* ボタンは assets/main.css の共通定義に従う。 */
 </style>

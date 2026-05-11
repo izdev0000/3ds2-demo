@@ -47,13 +47,13 @@ async function mountPage(): Promise<VueWrapper> {
   return wrapper
 }
 
-// 2 ステップ UX (① 注文確定 → ② 支払う) を 1 回で進める helper。
-// 注: 注文確定後 OrderForm は summary 表示に切替わり form は消えるため、
-//     確定後の card form は findAll('form')[0] となる。
+// 2 ステップ UX (① カート追加 → ② 支払う) を 1 回で進める helper。
+// OrderForm は確定後も <form> (disabled inputs + 破棄ボタン) を保持するため、
+// form の index は常に [0]=OrderForm, [1]=PaymentCardSection で安定する。
 async function submitFullFlow(wrapper: VueWrapper) {
   await wrapper.findAll('form')[0]!.trigger('submit')
   await flushPromises()
-  await wrapper.findAll('form')[0]!.trigger('submit')
+  await wrapper.findAll('form')[1]!.trigger('submit')
   await flushPromises()
 }
 
@@ -96,7 +96,7 @@ describe('PaymentPage 統合テスト', () => {
   it('mount 直後は OrderForm + PaymentCardSection 表示 + PspClient.mountCardForm が呼ばれる', async () => {
     setupFakePsp()
     const wrapper = await mountPage()
-    expect(wrapper.text()).toContain('① 注文')
+    expect(wrapper.text()).toContain('① カート')
     expect(wrapper.text()).toContain('② 決済')
     expect(
       StripePspClientModule.stripePspClient.mountCardForm,
@@ -137,7 +137,7 @@ describe('PaymentPage 統合テスト', () => {
     expect(wrapper.text()).toContain('決済失敗')
     expect(wrapper.text()).toContain('card declined')
     // 失敗後も OrderForm 確定済 + PaymentCardSection は残る (1 Order : N Transaction)
-    expect(wrapper.text()).toContain('① 注文')
+    expect(wrapper.text()).toContain('① カート')
     expect(wrapper.text()).toContain('② 決済')
   })
 
@@ -145,14 +145,14 @@ describe('PaymentPage 統合テスト', () => {
     setupFakePsp()
     const wrapper = await mountPage()
 
-    // Step 1: 注文確定して PaymentCardSection を active にする。
-    // 確定後 OrderForm は form を持たないので、card form は forms[0] に来る。
+    // Step 1: カート追加して PaymentCardSection を active にする。
+    // OrderForm は確定後も form を保持するので、card form は常に forms[1]。
     await wrapper.findAll('form')[0]!.trigger('submit')
     await flushPromises()
 
-    // 注文確定直後は lock なし → 「支払う」 enabled
+    // カート追加直後は lock なし → 「支払う」 enabled
     const payButton = () =>
-      wrapper.findAll('form')[0]!.find('button[type="submit"]')
+      wrapper.findAll('form')[1]!.find('button[type="submit"]')
     expect(payButton().attributes('disabled')).toBeUndefined()
     expect(wrapper.text()).not.toContain('別 tab で決済処理中')
 
@@ -210,7 +210,7 @@ describe('PaymentPage 統合テスト', () => {
     await resetButton?.trigger('click')
     await flushPromises()
     // 「最初に戻る」で OrderForm 入力モードに戻る (Order も破棄される)
-    expect(wrapper.text()).toContain('① 注文')
+    expect(wrapper.text()).toContain('① カート')
     expect(wrapper.text()).toContain('② 決済')
   })
 })

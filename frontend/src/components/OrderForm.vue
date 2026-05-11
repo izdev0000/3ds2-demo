@@ -46,26 +46,35 @@ function discard() {
 <template>
   <section class="order-form" :class="{ confirmed }">
     <header>
-      <h2>① 注文</h2>
-      <span v-if="confirmed" class="badge confirmed-badge">確定済</span>
+      <h2>① カート</h2>
+      <span v-if="confirmed" class="badge confirmed-badge">カートイン済</span>
     </header>
 
-    <p v-if="orderError" class="error">注文作成失敗: {{ orderError }}</p>
+    <p v-if="orderError" class="error">カートイン失敗: {{ orderError }}</p>
 
-    <!-- 入力モード: Order 未確定 -->
-    <form
-      v-if="!confirmed"
-      class="fields"
-      @submit.prevent="submitOrder"
-    >
+    <!-- 確定の前後でレイアウトを変えず、フィールドは disabled にして
+         「中身は変えられないが視覚的に値は見える」状態にする。
+         注文 ID / status は確定後にのみ追加で表示する。 -->
+    <form class="fields" @submit.prevent="submitOrder">
       <label>
         商品名
-        <input v-model="itemName" type="text" required />
+        <input
+          v-model="itemName"
+          type="text"
+          required
+          :disabled="confirmed"
+        />
       </label>
       <div class="row">
         <label>
           数量
-          <input v-model.number="itemQuantity" type="number" min="1" required />
+          <input
+            v-model.number="itemQuantity"
+            type="number"
+            min="1"
+            required
+            :disabled="confirmed"
+          />
         </label>
         <label>
           単価
@@ -74,47 +83,55 @@ function discard() {
             type="number"
             min="0"
             required
+            :disabled="confirmed"
           />
         </label>
         <label>
           通貨
-          <input v-model="currency" type="text" maxlength="3" required />
+          <input
+            v-model="currency"
+            type="text"
+            maxlength="3"
+            required
+            :disabled="confirmed"
+          />
         </label>
       </div>
       <p class="subtotal">
         合計: {{ subtotal }} {{ currency.toUpperCase() }}
-        <span v-if="subtotal < 50" class="warn-inline">
+        <span v-if="!confirmed && subtotal < 50" class="warn-inline">
           (Stripe の最小単位 50 未満)
         </span>
       </p>
-      <button type="submit" :disabled="submitting || subtotal < 50">
-        {{ submitting ? '送信中…' : '注文確定' }}
-      </button>
-    </form>
 
-    <!-- 確定済モード: Order 情報を表示 + 破棄ボタン -->
-    <div v-else class="summary">
-      <dl>
+      <!-- 確定前後で枠サイズが変わらないよう、meta は常に同じ高さの枠を確保。
+           未確定時はプレースホルダ "-" を表示する。 -->
+      <dl class="meta">
         <dt>Order ID</dt>
-        <dd><code>{{ store.order!.id }}</code></dd>
-        <dt>明細</dt>
         <dd>
-          <ul class="items">
-            <li v-for="item in store.order!.items" :key="item.id">
-              {{ item.name }} × {{ item.quantity }} ({{ item.subtotal }}
-              {{ store.order!.currency.toUpperCase() }})
-            </li>
-          </ul>
+          <code v-if="confirmed">{{ store.order!.id }}</code>
+          <span v-else class="placeholder">-</span>
         </dd>
-        <dt>合計</dt>
-        <dd>{{ store.order!.amount }} {{ store.order!.currency.toUpperCase() }}</dd>
         <dt>Status</dt>
-        <dd><code>{{ store.order!.status }}</code></dd>
+        <dd>
+          <code v-if="confirmed">{{ store.order!.status }}</code>
+          <span v-else class="placeholder">-</span>
+        </dd>
       </dl>
-      <button type="button" class="discard" @click="discard">
-        注文を破棄してやり直し
-      </button>
-    </div>
+
+      <div class="actions">
+        <button
+          v-if="!confirmed"
+          type="submit"
+          :disabled="submitting || subtotal < 50"
+        >
+          {{ submitting ? '送信中…' : 'カートイン' }}
+        </button>
+        <button v-else type="button" class="secondary" @click="discard">
+          カートを破棄してやり直し
+        </button>
+      </div>
+    </form>
   </section>
 </template>
 
@@ -196,48 +213,34 @@ input {
   font-size: 0.85rem;
 }
 
-button {
-  padding: 0.5rem 1rem;
-  font-size: 0.95rem;
-  cursor: pointer;
-}
+/* ボタンのスタイルは assets/main.css の共通定義に従う (上書きしない)。 */
 
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.discard {
-  align-self: flex-start;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  color: inherit;
-  font-size: 0.8rem;
-  padding: 0.3rem 0.6rem;
-}
-
-.summary dl {
+.meta {
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: 0.25rem 1rem;
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
-.summary dt {
+.meta dt {
   font-weight: 600;
   opacity: 0.8;
 }
 
-.summary dd {
+.meta dd {
   margin: 0;
   word-break: break-all;
 }
 
-.items {
-  margin: 0;
-  padding-left: 1rem;
-  list-style: disc;
+input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.placeholder {
+  opacity: 0.4;
+  font-family: monospace;
 }
 
 code {

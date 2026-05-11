@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { stripePspClient } from '@/services/StripePspClient'
+import { pspClient } from '@/services/psp'
 import { usePaymentStore } from '@/stores/payment'
 
 // Stripe TEST 環境のテストカード番号 + 1-click 実行用 PaymentMethod alias。
@@ -80,7 +80,7 @@ async function execute(card: TestCard) {
   // 現在の flow を反映。server_redirect の時は returnUrl も付与。
   await store.start({
     orderId: store.order.id,
-    psp: stripePspClient,
+    psp: pspClient,
     paymentMethodId: card.alias,
     flow: store.currentFlow,
     returnUrl:
@@ -100,12 +100,12 @@ const isBusy = (phase: string) =>
   <aside class="test-cards">
     <h3>テストカード</h3>
     <p class="intro">
-      Stripe Elements は iframe 隔離のため自動入力できません。「実行」は
+      PSP の Elements iframe は隔離されており自動入力できません。「実行」は
       Elements を bypass して PM alias で直接 confirm (1-click)、「コピー」は
       左フォームに手動 paste 用。
     </p>
     <p v-if="!store.order" class="warn">
-      ① で注文を確定してから実行できます。
+      ① でカートインしてから実行できます。
     </p>
     <ul>
       <li v-for="card in cards" :key="card.number">
@@ -135,7 +135,7 @@ const isBusy = (phase: string) =>
       </li>
     </ul>
     <p class="note">
-      実行時は ① で確定済の Order を使用 (再決済も同じ Order)。
+      実行時は ① でカートイン済の Order を使用 (再決済も同じ Order)。
       有効期限 / CVC は TEST 環境では任意 (12 / 40, 123 等)。
     </p>
   </aside>
@@ -214,10 +214,12 @@ code {
   justify-content: flex-end;
 }
 
+/* 側パネル内のカード毎ボタンはサイドパネル幅に収めるため、敢えて寸法を
+   小さくしている (assets/main.css のグローバル設定を局所的に上書き)。 */
 button {
+  align-self: auto;
   padding: 0.25rem 0.6rem;
   font-size: 0.8rem;
-  cursor: pointer;
   white-space: nowrap;
 }
 
@@ -225,11 +227,6 @@ button.primary {
   background: var(--color-text);
   color: var(--color-background);
   border-color: var(--color-text);
-}
-
-button.primary:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
 }
 
 button.copied {

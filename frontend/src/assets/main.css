@@ -1,5 +1,37 @@
 @import './base.css';
 
+/* ------------------------------------------------------------------
+ * 共通ボタンスタイル (component 共通)。
+ * デモ全体で同じ寸法・タイポを使い、状態切替で枠が動かないようにする。
+ * 各 component の scoped <style> ではこの値を上書きしない方針 (例外時は明記)。
+ * ------------------------------------------------------------------ */
+button {
+  align-self: flex-start;
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  line-height: 1.2;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  background: var(--color-background-soft);
+  color: inherit;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--color-background-mute);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* セカンダリ (破棄 / キャンセル系)。背景透過で「主アクションではない」感を出す。 */
+button.secondary {
+  background: transparent;
+}
+
 #app {
   max-width: 1280px;
   margin: 0 auto;

@@ -8,7 +8,7 @@ const store = usePaymentStore()
   <section class="challenge">
     <h2>3DS2 チャレンジ実行中</h2>
     <p>
-      カード発行会社の認証画面を表示しています（Stripe SDK が
+      カード発行会社の認証画面を表示しています（PSP SDK が
       iframe を制御）。EMVCo §6.5 CReq → CRes に相当。
     </p>
     <p v-if="store.paymentIntentId" class="meta">

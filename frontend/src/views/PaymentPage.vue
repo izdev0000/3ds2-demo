@@ -46,10 +46,11 @@ const busyMessage = computed(() => {
 <template>
   <main class="payment-page">
     <h1>3DS2 Demo</h1>
-    <PaymentFlowTabs v-if="!isTerminal" />
+    <PaymentFlowTabs v-if="!isTerminal && !isBusy" />
     <p class="phase">
       phase: {{ store.phase }} / flow: {{ store.currentFlow }}
     </p>
+    <ScenarioSelector v-if="!isTerminal && !isBusy" class="scenarios" />
     <div class="layout">
       <div class="primary">
         <template v-if="isFormPhase">
@@ -61,8 +62,6 @@ const busyMessage = computed(() => {
       </div>
       <TestCardsPanel v-if="isFormPhase" class="aside" />
     </div>
-
-    <ScenarioSelector class="scenarios" />
 
     <div
       v-if="isBusy"
@@ -84,9 +83,14 @@ const busyMessage = computed(() => {
 
 <style scoped>
 .payment-page {
+  /* width:100% で常に親要素を埋め、max-width で天井を決める。
+     これで内側の OrderForm が summary mode に切替わって content が縮んでも
+     ページ全体の幅は変化しない (注文確定で枠が縮む現象の防止)。 */
+  width: 100%;
   max-width: 960px;
   margin: 0 auto;
   padding: 2rem 1rem;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -105,7 +109,9 @@ const busyMessage = computed(() => {
 }
 
 .primary {
-  flex: 1 1 auto;
+  /* basis を 0 にして「残り全部取る」挙動にすることで、中身 (OrderForm の
+     input mode / summary mode) によって幅が変わらないようにする。 */
+  flex: 1 1 0;
   min-width: 0;
 }
 

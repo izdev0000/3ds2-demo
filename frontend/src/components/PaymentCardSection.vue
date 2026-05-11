@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { isLockedByOther, onChange } from '@/services/paymentLock'
 import type { MountedCardForm } from '@/services/PspClient'
-import { stripePspClient } from '@/services/StripePspClient'
+import { pspClient } from '@/services/psp'
 import { usePaymentStore } from '@/stores/payment'
 
 const numberMount = ref<HTMLDivElement | null>(null)
@@ -13,7 +13,7 @@ const isMounted = ref<boolean>(false)
 const lockedByOther = ref<boolean>(false)
 
 const store = usePaymentStore()
-const psp = stripePspClient
+const psp = pspClient
 let mounted: MountedCardForm | null = null
 let unsubLock: (() => void) | null = null
 
@@ -85,7 +85,7 @@ async function pay() {
     <header>
       <h2>② 決済</h2>
       <span v-if="!orderConfirmed" class="badge inactive-badge">
-        先に注文を確定してください
+        先にカートインしてください
       </span>
     </header>
 
@@ -201,14 +201,5 @@ header h2 {
   border-left: 3px solid #b58900;
 }
 
-button {
-  padding: 0.6rem 1rem;
-  font-size: 1rem;
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
+/* ボタンは assets/main.css の共通定義に従う。 */
 </style>

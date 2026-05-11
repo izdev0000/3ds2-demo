@@ -20,7 +20,7 @@ function setFlow(flow: ConfirmationFlow) {
       :class="{ active: currentFlow === 'client_sdk' }"
       @click="setFlow('client_sdk')"
     >
-      Inline (Stripe SDK)
+      Inline (Client SDK)
     </button>
     <button
       type="button"
