@@ -5,6 +5,7 @@ import PaymentCardSection from '@/components/PaymentCardSection.vue'
 import PaymentFlowTabs from '@/components/PaymentFlowTabs.vue'
 import ChallengeView from '@/components/ChallengeView.vue'
 import ResultView from '@/components/ResultView.vue'
+import ScenarioSelector from '@/components/ScenarioSelector.vue'
 import TestCardsPanel from '@/components/TestCardsPanel.vue'
 import { usePaymentStore } from '@/stores/payment'
 
@@ -60,6 +61,8 @@ const busyMessage = computed(() => {
       </div>
       <TestCardsPanel v-if="isFormPhase" class="aside" />
     </div>
+
+    <ScenarioSelector class="scenarios" />
 
     <div
       v-if="isBusy"
