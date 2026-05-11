@@ -2,21 +2,26 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\WebhookController;
 use Illuminate\Support\Facades\Route;
 
 /*
  * API routes は docs/api-contract.yaml と完全に一致させる：
+ *   POST  /api/orders
+ *   GET   /api/orders/{id}
  *   POST  /api/payments
  *   GET   /api/payments/{id}
  *   POST  /api/payments/{id}/confirm
  *   GET   /api/payments/{id}/events
  *   POST  /api/webhooks/stripe
- *
- * 現状はすべての Controller がスケルトンで 501 を返す (Y2)。
- * 実装は Y3 で行う。
  */
+
+Route::prefix('orders')->name('orders.')->group(function (): void {
+    Route::post('/', [OrderController::class, 'create'])->name('create');
+    Route::get('/{id}', [OrderController::class, 'show'])->name('show');
+});
 
 Route::prefix('payments')->name('payments.')->group(function (): void {
     Route::post('/', [PaymentController::class, 'create'])->name('create');

@@ -23,12 +23,80 @@ servers:
     description: ローカル開発環境（docker compose）
 
 tags:
+  - name: orders
+    description: 注文（業務単位）の作成・取得
   - name: payments
     description: Payment Intent の作成・確認・状態取得
   - name: webhooks
     description: PSP からの webhook 受信
 
 paths:
+  /api/orders:
+    post:
+      tags: [orders]
+      summary: 仮注文を作成
+      description: |
+        決済前段階の Order を `pending` 状態で作成する。
+        Order は業務上の注文単位であり、決済（Transaction）は 1 Order に対し N 件
+        紐づく（失敗で別カード再決済するケースに対応）。
+
+        Order.status は webhook 経由でのみ `paid` に遷移する。
+        frontend からの confirm 成功 response や return_url 到達では遷移しない
+        （docs/design/error-handling.md §8.4 参照）。
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            examples:
+              single_item:
+                summary: 商品 1 点の注文
+                value:
+                  currency: jpy
+                  items:
+                    - name: T-shirt (S)
+                      quantity: 1
+                      unit_price: 1000
+              multi_item:
+                summary: 商品複数点の注文
+                value:
+                  currency: jpy
+                  items:
+                    - name: T-shirt (S)
+                      quantity: 2
+                      unit_price: 1000
+                    - name: Sticker pack
+                      quantity: 1
+                      unit_price: 500
+      responses:
+        '201':
+          description: 作成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /api/orders/{id}:
+    get:
+      tags: [orders]
+      summary: Order の現在状態を取得
+      operationId: getOrder
+      parameters:
+        - $ref: '#/components/parameters/OrderIdPath'
+      responses:
+        '200':
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/payments:
     post:
       tags: [payments]
@@ -48,15 +116,13 @@ paths:
               $ref: '#/components/schemas/CreatePaymentRequest'
             examples:
               jpy_basic:
-                summary: 1000 円の決済（フリクションレス想定）
+                summary: 既存 Order に対する決済（フリクションレス想定）
                 value:
-                  amount: 1000
-                  currency: jpy
+                  order_id: ord_01HYZ800
               jpy_with_return:
                 summary: redirect 経路用に return_url 付き
                 value:
-                  amount: 1000
-                  currency: jpy
+                  order_id: ord_01HYZ800
                   return_url: http://localhost:5173/payments/return
       responses:
         '201':
@@ -238,17 +304,21 @@ components:
         pattern: '^txn_[A-Za-z0-9]+$'
       description: 内部 transaction ID（`txn_` プレフィックス + ULID 等）
       example: txn_01HYZ800
+    OrderIdPath:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        pattern: '^ord_[A-Za-z0-9]+$'
+      description: 内部 order ID（`ord_` プレフィックス + ULID 等）
+      example: ord_01HYZ800
 
   schemas:
-    CreatePaymentRequest:
+    CreateOrderRequest:
       type: object
-      required: [amount, currency]
+      required: [currency, items]
       properties:
-        amount:
-          type: integer
-          minimum: 50
-          description: 通貨の最小単位（JPY なら円、USD ならセント）
-          example: 1000
         currency:
           type: string
           minLength: 3
@@ -256,6 +326,110 @@ components:
           pattern: '^[a-z]{3}$'
           description: ISO 4217 通貨コード（小文字）
           example: jpy
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/OrderItemInput'
+        metadata:
+          type: object
+          additionalProperties: true
+          description: 任意の業務メタデータ
+
+    OrderItemInput:
+      type: object
+      required: [name, quantity, unit_price]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: T-shirt (S)
+        quantity:
+          type: integer
+          minimum: 1
+          example: 1
+        unit_price:
+          type: integer
+          minimum: 0
+          description: 通貨の最小単位（JPY なら円、USD ならセント）
+          example: 1000
+
+    OrderResponse:
+      type: object
+      required: [id, status, amount, currency, items, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          description: 内部 order ID
+          example: ord_01HYZ800
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        amount:
+          type: integer
+          description: items の合計金額（quantity * unit_price の総和）
+          example: 1000
+        currency:
+          type: string
+          example: jpy
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        metadata:
+          type:
+            - object
+            - 'null'
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    OrderItem:
+      allOf:
+        - $ref: '#/components/schemas/OrderItemInput'
+        - type: object
+          required: [id, subtotal]
+          properties:
+            id:
+              type: string
+              description: 内部 order item ID
+              example: oit_01HYZ800
+            subtotal:
+              type: integer
+              description: quantity * unit_price
+              example: 1000
+
+    OrderStatus:
+      type: string
+      description: |
+        Order の業務状態。webhook 経由でのみ `paid` に遷移する。
+        | status | 意味 |
+        | --- | --- |
+        | pending | 仮注文（決済未確定） |
+        | paid | 決済成功・注文確定 |
+        | canceled | 注文キャンセル（決済前 or 全 Transaction が canceled） |
+        | refunded | 返金済み |
+      enum:
+        - pending
+        - paid
+        - canceled
+        - refunded
+
+    CreatePaymentRequest:
+      type: object
+      required: [order_id]
+      properties:
+        order_id:
+          type: string
+          pattern: '^ord_[A-Za-z0-9]+$'
+          description: |
+            紐づく Order の内部 ID。amount / currency は Order から導出するため
+            request では指定しない（client 側で改竄できないようにする）。
+          example: ord_01HYZ800
         return_url:
           type: string
           format: uri
@@ -296,6 +470,7 @@ components:
       type: object
       required:
         - id
+        - order_id
         - status
         - amount
         - currency
@@ -307,6 +482,10 @@ components:
           type: string
           description: 内部 transaction ID
           example: txn_01HYZ800
+        order_id:
+          type: string
+          description: 紐づく Order の内部 ID
+          example: ord_01HYZ800
         psp_payment_intent_id:
           type: string
           description: PSP 側の PaymentIntent ID (Stripe なら pi_..., Adyen なら pspReference 相当)
@@ -454,8 +633,12 @@ components:
             - invalid_amount
             - invalid_currency
             - invalid_payment_method
+            - validation_failed
             - payment_not_found
             - payment_already_confirmed
+            - order_not_found
+            - order_already_paid
+            - order_already_canceled
             - signature_verification_failed
             - stripe_api_error
             - internal_error
