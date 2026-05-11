@@ -6,6 +6,11 @@ import {
   type ConfirmationFlow,
   type PaymentIntentStatus,
 } from '@/services/payment'
+import {
+  createOrder as apiCreateOrder,
+  type CreateOrderRequest,
+  type OrderResponse,
+} from '@/services/order'
 import { release, tryAcquire } from '@/services/paymentLock'
 import { navigation } from '@/services/navigation'
 import type { CardHandle, PspClient } from '@/services/PspClient'
@@ -32,8 +37,7 @@ const REDIRECT_TXN_KEY = 'redirect-txn-id'
 // flow 未指定時は store.currentFlow を使う。
 // flow=server_redirect の時は returnUrl 必須。
 export type StartPaymentArgs = {
-  amount: number
-  currency: string
+  orderId: string
   psp: PspClient
   flow?: ConfirmationFlow
   returnUrl?: string
@@ -42,11 +46,14 @@ export type StartPaymentArgs = {
 export const usePaymentStore = defineStore('payment', () => {
   const phase = ref<PaymentPhase>('idle')
   const currentFlow = ref<ConfirmationFlow>('client_sdk')
+  const order = ref<OrderResponse | null>(null)
   const paymentIntentId = ref<string | null>(null)
   const clientSecret = ref<string | null>(null)
   const finalStatus = ref<PaymentIntentStatus | null>(null)
   const errorMessage = ref<string | null>(null)
 
+  // 決済試行 (Transaction) に関する state のみリセット。Order は保持して
+  // 別カードで再決済できるようにする (1 Order : N Transaction)。
   function reset() {
     phase.value = 'idle'
     paymentIntentId.value = null
@@ -55,13 +62,29 @@ export const usePaymentStore = defineStore('payment', () => {
     errorMessage.value = null
   }
 
+  // 注文ごと破棄して入力からやり直す。
+  // 注: backend の Order レコードは pending のまま残る (墓場化)。
+  // 本デモのスコープでは清掃しない (docs/design/error-handling.md §11)。
+  function resetOrder() {
+    order.value = null
+    reset()
+  }
+
   function fail(message: string) {
     errorMessage.value = message
     phase.value = 'failed'
   }
 
+  // 仮注文を作成して store に保持する。続けて start() を呼ぶ前段階。
+  // 失敗時は order=null のままで例外を rethrow する (form 側で表示)。
+  async function createOrder(req: CreateOrderRequest): Promise<OrderResponse> {
+    const res = await apiCreateOrder(req)
+    order.value = res
+    return res
+  }
+
   async function start(args: StartPaymentArgs) {
-    const { amount, currency } = args
+    const { orderId } = args
     const flow = args.flow ?? currentFlow.value
     reset()
 
@@ -74,7 +97,7 @@ export const usePaymentStore = defineStore('payment', () => {
     try {
       let intent
       try {
-        intent = await createPaymentIntent({ amount, currency })
+        intent = await createPaymentIntent({ order_id: orderId })
       } catch (e) {
         fail(e instanceof Error ? e.message : String(e))
         return
@@ -184,11 +207,14 @@ export const usePaymentStore = defineStore('payment', () => {
   return {
     phase,
     currentFlow,
+    order,
     paymentIntentId,
     clientSecret,
     finalStatus,
     errorMessage,
     reset,
+    resetOrder,
+    createOrder,
     start,
   }
 })

@@ -13,8 +13,8 @@ export type PaymentIntentStatus =
 export type ConfirmationFlow = 'client_sdk' | 'server_redirect'
 
 export interface CreatePaymentIntentRequest {
-  amount: number
-  currency: string
+  order_id: string
+  return_url?: string
 }
 
 export interface NextAction {
@@ -28,6 +28,7 @@ export interface NextAction {
 // Backward-compat alias: 既存呼出が使う minimal subset 型
 export interface PaymentIntentResponse {
   id: string
+  order_id: string
   client_secret: string
   status: PaymentIntentStatus
 }
