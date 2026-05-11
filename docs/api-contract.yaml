@@ -29,6 +29,8 @@ tags:
     description: Payment Intent の作成・確認・状態取得
   - name: webhooks
     description: PSP からの webhook 受信
+  - name: debug
+    description: 学習デモ用の補助 endpoint (本番化時は無効化推奨)
 
 paths:
   /api/orders:
@@ -253,6 +255,48 @@ paths:
                       $ref: '#/components/schemas/PaymentEvent'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /api/_debug/recent-rows:
+    get:
+      tags: [debug]
+      summary: 各テーブルの直近 5 行を返す (デモ可視化用)
+      description: |
+        orders / transactions / order_items / webhook_events の最新 5 行を
+        まとめて返す。frontend がポーリングしてデータフローを観察できる
+        ようにするための補助 endpoint。
+
+        本デモは TEST 環境専用のため認証なし。本番化する場合は middleware で
+        local 限定にすること。
+      operationId: getDebugRecentRows
+      responses:
+        '200':
+          description: 最新 5 行
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [orders, transactions, order_items, webhook_events]
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  transactions:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  order_items:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  webhook_events:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
 
   /api/webhooks/stripe:
     post:

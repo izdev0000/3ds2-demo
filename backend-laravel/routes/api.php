@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\DebugController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\WebhookController;
@@ -31,3 +32,7 @@ Route::prefix('payments')->name('payments.')->group(function (): void {
 });
 
 Route::post('webhooks/stripe', [WebhookController::class, 'stripe'])->name('webhooks.stripe');
+
+// 教育デモ用 debug endpoint。各テーブルの直近 5 行を返し、frontend が
+// データフローを可視化できるようにする。
+Route::get('_debug/recent-rows', [DebugController::class, 'recentRows'])->name('debug.recent-rows');
