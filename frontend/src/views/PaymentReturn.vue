@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { getPaymentIntent, type PaymentResponse } from '@/services/payment'
+import { getOrder, type OrderResponse } from '@/services/order'
 
 // docs/design/confirmation-flow.md §8 の ID 逆引き戦略:
 // Strategy C: return_url の query (?txn=txn_xxx) が Stripe 経由で戻ってくる
@@ -11,6 +12,7 @@ const REDIRECT_TXN_KEY = 'redirect-txn-id'
 const route = useRoute()
 const txnId = ref<string | null>(null)
 const payment = ref<PaymentResponse | null>(null)
+const order = ref<OrderResponse | null>(null)
 const errorMessage = ref<string | null>(null)
 const loading = ref(true)
 
@@ -34,6 +36,15 @@ onMounted(async () => {
 
   try {
     payment.value = await getPaymentIntent(id)
+    // 業務的な確定状態 (paid) は Order 側で見る。webhook 経由でのみ遷移する
+    // ため、redirect 直後はまだ pending のことがある (docs/design/error-handling.md §8.4)。
+    if (payment.value?.order_id) {
+      try {
+        order.value = await getOrder(payment.value.order_id)
+      } catch {
+        // Order 取得失敗は致命ではない (payment 状態だけでも表示する)
+      }
+    }
   } catch (e) {
     errorMessage.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -59,7 +70,17 @@ onMounted(async () => {
         <dd><code>{{ payment.status }}</code></dd>
         <dt>金額</dt>
         <dd>{{ payment.amount }} {{ payment.currency.toUpperCase() }}</dd>
+        <dt>Order</dt>
+        <dd>
+          <code>{{ payment.order_id }}</code>
+          <span v-if="order"> / status: <code>{{ order.status }}</code></span>
+          <span v-else class="muted"> (取得不可)</span>
+        </dd>
       </dl>
+      <p v-if="order && order.status === 'pending'" class="muted">
+        Order はまだ pending です。webhook で paid に遷移します
+        (docs/design/error-handling.md §8.4)。
+      </p>
     </section>
 
     <p>
@@ -116,5 +137,10 @@ code {
 
 .error {
   color: #c00;
+}
+
+.muted {
+  opacity: 0.7;
+  font-size: 0.85rem;
 }
 </style>

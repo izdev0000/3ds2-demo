@@ -73,10 +73,13 @@ async function copy(card: TestCard) {
 
 async function execute(card: TestCard) {
   if (!card.alias) return
+  // 注文確定前は実行不可。Order を hub にして同じ Order で複数 Transaction を
+  // 試せるようにする (1 Order : N Transaction)。
+  if (!store.order) return
+
   // 現在の flow を反映。server_redirect の時は returnUrl も付与。
   await store.start({
-    amount: 100,
-    currency: 'jpy',
+    orderId: store.order.id,
     psp: stripePspClient,
     paymentMethodId: card.alias,
     flow: store.currentFlow,
@@ -101,6 +104,9 @@ const isBusy = (phase: string) =>
       Elements を bypass して PM alias で直接 confirm (1-click)、「コピー」は
       左フォームに手動 paste 用。
     </p>
+    <p v-if="!store.order" class="warn">
+      ① で注文を確定してから実行できます。
+    </p>
     <ul>
       <li v-for="card in cards" :key="card.number">
         <div class="meta">
@@ -113,7 +119,7 @@ const isBusy = (phase: string) =>
             v-if="card.alias"
             type="button"
             class="primary"
-            :disabled="isBusy(store.phase)"
+            :disabled="isBusy(store.phase) || !store.order"
             @click="execute(card)"
           >
             実行
@@ -129,7 +135,7 @@ const isBusy = (phase: string) =>
       </li>
     </ul>
     <p class="note">
-      実行時の金額は 100 JPY 固定。手動入力時は左フォームの値を使用。
+      実行時は ① で確定済の Order を使用 (再決済も同じ Order)。
       有効期限 / CVC は TEST 環境では任意 (12 / 40, 123 等)。
     </p>
   </aside>
@@ -152,6 +158,15 @@ const isBusy = (phase: string) =>
   margin: 0 0 0.75rem;
   opacity: 0.75;
   line-height: 1.4;
+}
+
+.warn {
+  margin: 0 0 0.75rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+  color: #b58900;
+  background: rgba(181, 137, 0, 0.1);
+  border-left: 3px solid #b58900;
 }
 
 ul {
