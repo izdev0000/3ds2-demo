@@ -7,6 +7,10 @@ EMV 3-D Secure 2.x の統合学習デモ。**Vue 3 frontend × Laravel 12 backen
 
 > 🤖 本リポジトリは [Claude Code]を活用して開発しています。設計・仕様判断は人間、ボイラープレート / 型定義 / テストケース生成は AI に委譲。エージェント向けの規約は [CLAUDE.md](./CLAUDE.md) を参照。
 
+<p align="center">
+  <img src="./docs/screenshots/overview.png" alt="3ds2-demo overview: ① カートイン → ② 決済 の 2 ステップ UI + Stripe テストカードパネル" width="900">
+</p>
+
 ---
 
 ## 本リポジトリの位置づけ
