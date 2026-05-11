@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { usePaymentStore } from '@/stores/payment'
-import { useScenarioStore } from '@/stores/scenario'
 import { getOrder, type OrderResponse } from '@/services/order'
 
 const store = usePaymentStore()
-const scenario = useScenarioStore()
 const isSuccess = computed(() => store.phase === 'succeeded')
 
 // 業務的な確定は Order.status === 'paid' で判定する (docs/design/error-handling.md §8.4)。
@@ -13,10 +11,6 @@ const isSuccess = computed(() => store.phase === 'succeeded')
 const order = ref<OrderResponse | null>(null)
 const orderError = ref<string | null>(null)
 const fetching = ref(false)
-// 離脱 scenario では「user が居なくなった」体で初回 fetch をしない。
-const skipInitialFetch = computed(
-  () => scenario.current === 'abandon_after_success',
-)
 
 async function fetchOrder() {
   if (!store.order) return
@@ -32,9 +26,7 @@ async function fetchOrder() {
 }
 
 onMounted(() => {
-  if (!isSuccess.value) return
-  if (skipInitialFetch.value) return
-  void fetchOrder()
+  if (isSuccess.value) void fetchOrder()
 })
 </script>
 
@@ -69,30 +61,14 @@ onMounted(() => {
       </template>
     </dl>
 
-    <!-- 離脱 scenario: 結果を見ずに離脱した user の体 -->
-    <div v-if="isSuccess && skipInitialFetch && !order" class="info abandoned">
-      <p>
-        🚪 <strong>離脱を模擬中</strong>:
-        user は結果を確認せずブラウザを閉じた想定。
-      </p>
-      <p>
-        backend では webhook が <code>payment_intent.succeeded</code>
-        を受けて Order.status を <code>paid</code> に更新しています。
-        UI がそれを見ないだけで、業務確定は進んでいる。
-      </p>
-      <button type="button" @click="fetchOrder">
-        後で再訪したと仮定して Order を取得
-      </button>
-    </div>
-
-    <!-- webhook 遅延 scenario: 取得しても pending のまま -->
+    <!-- webhook 未着で Order がまだ pending なら手動 refetch を提供 -->
     <div
       v-if="isSuccess && order?.status === 'pending'"
       class="info delayed"
     >
       <p>
         ⏳ Stripe では succeeded だが、Order は <code>pending</code> のまま。
-        webhook がまだ届いていない可能性 (実環境では数秒〜数十秒の差はある)。
+        webhook 未着の可能性 (docs/design/error-handling.md §8.4)。
       </p>
       <button type="button" :disabled="fetching" @click="fetchOrder">
         {{ fetching ? '取得中…' : '再取得' }}
@@ -103,7 +79,7 @@ onMounted(() => {
 
     <!-- 成功後は Order が paid 確定なので、新しい注文からやり直すために
          Order ごとリセットする -->
-    <button class="reset" @click="store.resetOrder()">最初に戻る</button>
+    <button class="reset secondary" @click="store.resetOrder()">最初に戻る</button>
   </section>
 </template>
 
@@ -165,11 +141,6 @@ code {
   margin: 0;
 }
 
-.abandoned {
-  background: rgba(96, 96, 160, 0.08);
-  border-left: 3px solid #66a;
-}
-
 .delayed {
   background: rgba(181, 137, 0, 0.08);
   border-left: 3px solid #b58900;
@@ -180,6 +151,5 @@ code {
   color: #c00;
   font-size: 0.85rem;
 }
-
 /* ボタンは assets/main.css の共通定義に従う。 */
 </style>

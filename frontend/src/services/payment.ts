@@ -1,8 +1,6 @@
 // docs/api-contract.yaml の PaymentResponse / ConfirmPaymentRequest を反映する
 // 暫定インターフェース。将来 openapi-typescript 等で型自動生成する想定。
 
-import { useScenarioStore } from '@/stores/scenario'
-
 export type PaymentIntentStatus =
   | 'requires_payment_method'
   | 'requires_confirmation'
@@ -70,12 +68,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export function createPaymentIntent(
   body: CreatePaymentIntentRequest,
 ): Promise<PaymentIntentResponse> {
-  const scenario = useScenarioStore()
-  if (scenario.current === 'payments_500') {
-    return Promise.reject(
-      new Error('Simulated: 500 Internal Server Error (POST /api/payments)'),
-    )
-  }
   return request<PaymentIntentResponse>('/api/payments', {
     method: 'POST',
     body: JSON.stringify(body),
