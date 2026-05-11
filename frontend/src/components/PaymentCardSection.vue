@@ -42,7 +42,7 @@ onMounted(async () => {
       },
       {
         placeholders: {
-          number: '4100 0000 0000 0100',
+          number: '0000 0000 0000 0000',
           expiry: '12 / 40',
           cvc: '123',
         },
