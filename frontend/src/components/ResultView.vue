@@ -25,7 +25,9 @@ const isSuccess = computed(() => store.phase === 'succeeded')
       </template>
     </dl>
 
-    <button @click="store.reset()">最初に戻る</button>
+    <!-- 成功後は Order が paid 確定なので、新しい注文からやり直すために
+         Order ごとリセットする -->
+    <button @click="store.resetOrder()">最初に戻る</button>
   </section>
 </template>
 

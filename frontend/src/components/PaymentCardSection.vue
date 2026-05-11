@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { isLockedByOther, onChange } from '@/services/paymentLock'
 import type { MountedCardForm } from '@/services/PspClient'
 import { stripePspClient } from '@/services/StripePspClient'
@@ -8,8 +8,6 @@ import { usePaymentStore } from '@/stores/payment'
 const numberMount = ref<HTMLDivElement | null>(null)
 const expiryMount = ref<HTMLDivElement | null>(null)
 const cvcMount = ref<HTMLDivElement | null>(null)
-const amount = ref<number>(100)
-const currency = ref<string>('jpy')
 const mountError = ref<string | null>(null)
 const isMounted = ref<boolean>(false)
 const lockedByOther = ref<boolean>(false)
@@ -18,6 +16,17 @@ const store = usePaymentStore()
 const psp = stripePspClient
 let mounted: MountedCardForm | null = null
 let unsubLock: (() => void) | null = null
+
+const orderConfirmed = computed(() => store.order !== null)
+const disabled = computed(
+  () =>
+    !orderConfirmed.value ||
+    !isMounted.value ||
+    lockedByOther.value ||
+    store.phase === 'preparing' ||
+    store.phase === 'challenging' ||
+    store.phase === 'redirecting',
+)
 
 onMounted(async () => {
   if (!numberMount.value || !expiryMount.value || !cvcMount.value) {
@@ -56,16 +65,10 @@ onBeforeUnmount(() => {
   unsubLock?.()
 })
 
-async function submit() {
-  if (!mounted) {
-    mountError.value = 'カード入力 UI が未準備です'
-    return
-  }
-  // store.currentFlow を読み、server_redirect なら returnUrl も渡す。
-  // start 内部で flow を分岐してくれる。
+async function pay() {
+  if (!mounted || !store.order) return
   await store.start({
-    amount: amount.value,
-    currency: currency.value,
+    orderId: store.order.id,
     psp,
     card: mounted.card,
     flow: store.currentFlow,
@@ -78,58 +81,88 @@ async function submit() {
 </script>
 
 <template>
-  <form class="payment-form" @submit.prevent="submit">
-    <h2>カード情報入力</h2>
+  <section class="card-section" :class="{ inactive: !orderConfirmed }">
+    <header>
+      <h2>② 決済</h2>
+      <span v-if="!orderConfirmed" class="badge inactive-badge">
+        先に注文を確定してください
+      </span>
+    </header>
 
     <p v-if="mountError" class="error">{{ mountError }}</p>
     <p v-if="lockedByOther" class="warn">
       別 tab で決済処理中のため、この tab からは送信できません。
     </p>
+    <p v-if="store.errorMessage && store.phase === 'failed'" class="error">
+      決済失敗: {{ store.errorMessage }}<br />
+      別カードで再試行できます (同じ Order に対して新規 Transaction を作成)。
+    </p>
 
-    <div class="row">
-      <label>
-        金額
-        <input v-model.number="amount" type="number" min="50" required />
-      </label>
-      <label>
-        通貨
-        <input v-model="currency" type="text" maxlength="3" required />
-      </label>
-    </div>
-
-    <label class="card-label">
-      カード番号
-      <div ref="numberMount" class="card-element"></div>
-    </label>
-
-    <div class="row">
+    <form class="fields" @submit.prevent="pay">
       <label class="card-label">
-        有効期限
-        <div ref="expiryMount" class="card-element"></div>
+        カード番号
+        <div ref="numberMount" class="card-element"></div>
       </label>
-      <label class="card-label">
-        CVC
-        <div ref="cvcMount" class="card-element"></div>
-      </label>
-    </div>
 
-    <button
-      type="submit"
-      :disabled="!isMounted || store.phase === 'preparing' || lockedByOther"
-    >
-      {{ store.phase === 'preparing' ? '送信中…' : '支払う' }}
-    </button>
-  </form>
+      <div class="row">
+        <label class="card-label">
+          有効期限
+          <div ref="expiryMount" class="card-element"></div>
+        </label>
+        <label class="card-label">
+          CVC
+          <div ref="cvcMount" class="card-element"></div>
+        </label>
+      </div>
+
+      <button type="submit" :disabled="disabled">
+        {{ store.phase === 'preparing' ? '送信中…' : '支払う' }}
+      </button>
+    </form>
+  </section>
 </template>
 
 <style scoped>
-.payment-form {
+.card-section {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   padding: 1rem;
   border: 1px solid var(--color-border);
   border-radius: 4px;
+}
+
+.card-section.inactive {
+  opacity: 0.6;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.badge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+}
+
+.inactive-badge {
+  background: var(--color-background-soft);
+  border: 1px solid var(--color-border);
+  opacity: 0.8;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .row {
@@ -139,15 +172,6 @@ async function submit() {
 
 .row label {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  font-size: 0.85rem;
-}
-
-.row input {
-  width: 100%;
-  padding: 0.4rem;
-  font-size: 1rem;
 }
 
 .card-label {

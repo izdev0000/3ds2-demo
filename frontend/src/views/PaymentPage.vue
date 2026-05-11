@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import PaymentForm from '@/components/PaymentForm.vue'
+import OrderForm from '@/components/OrderForm.vue'
+import PaymentCardSection from '@/components/PaymentCardSection.vue'
 import PaymentFlowTabs from '@/components/PaymentFlowTabs.vue'
 import ChallengeView from '@/components/ChallengeView.vue'
 import ResultView from '@/components/ResultView.vue'
@@ -9,15 +10,17 @@ import { usePaymentStore } from '@/stores/payment'
 
 const store = usePaymentStore()
 
-// idle / preparing の間だけ form と test cards を表示する。
+// idle / preparing / failed では入力 UI を表示する。
+// failed は同じ Order で別カード再決済できるよう ② を残す (1 Order : N Transaction)。
 const isFormPhase = computed(
-  () => store.phase === 'idle' || store.phase === 'preparing',
+  () =>
+    store.phase === 'idle' ||
+    store.phase === 'preparing' ||
+    store.phase === 'failed',
 )
 
-// 結果画面 (succeeded / failed) では tab を表示しない (操作不要なため)。
-const isTerminal = computed(
-  () => store.phase === 'succeeded' || store.phase === 'failed',
-)
+// succeeded のみ完全終了 (ResultView 表示)。failed は同 Order で再決済可能。
+const isTerminal = computed(() => store.phase === 'succeeded')
 
 // 決済処理中は overlay で全操作を block する。
 // (タブ切替で in-flight 状態を破壊する race condition の防止が主目的)
@@ -48,11 +51,12 @@ const busyMessage = computed(() => {
     </p>
     <div class="layout">
       <div class="primary">
-        <PaymentForm v-if="isFormPhase" />
+        <template v-if="isFormPhase">
+          <OrderForm />
+          <PaymentCardSection />
+        </template>
         <ChallengeView v-if="store.phase === 'challenging'" />
-        <ResultView
-          v-if="store.phase === 'succeeded' || store.phase === 'failed'"
-        />
+        <ResultView v-if="store.phase === 'succeeded'" />
       </div>
       <TestCardsPanel v-if="isFormPhase" class="aside" />
     </div>
