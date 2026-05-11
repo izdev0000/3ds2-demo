@@ -8,7 +8,9 @@ use App\Adapters\PaymentAdapterInterface;
 use App\DTO\ConfirmPaymentRequest;
 use App\DTO\CreatePaymentRequest;
 use App\DTO\PaymentEventResponse;
+use App\Enums\OrderStatus;
 use App\Http\Controllers\Controller;
+use App\Models\Order;
 use App\Models\Transaction;
 use App\Models\WebhookEvent;
 use Illuminate\Http\JsonResponse;
@@ -35,13 +37,36 @@ final class PaymentController extends Controller
     public function create(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'amount' => ['required', 'integer', 'min:50'],
-            'currency' => ['required', 'string', 'size:3'],
+            'order_id' => ['required', 'string', 'regex:/^ord_[A-Za-z0-9]+$/'],
             'return_url' => ['nullable', 'url'],
         ]);
 
+        $order = Order::query()->find($validated['order_id']);
+        if ($order === null) {
+            return response()->json([
+                'code' => 'order_not_found',
+                'message' => 'Order not found.',
+                'details' => ['order_id' => $validated['order_id']],
+            ], 404);
+        }
+
+        // 業務ルール: 既に paid/canceled/refunded な Order に対する新規決済は弾く。
+        if ($order->status !== OrderStatus::PENDING) {
+            $code = match ($order->status) {
+                OrderStatus::PAID => 'order_already_paid',
+                OrderStatus::CANCELED => 'order_already_canceled',
+                default => 'order_already_paid',
+            };
+
+            return response()->json([
+                'code' => $code,
+                'message' => sprintf('Order is %s, cannot create new payment.', $order->status->value),
+                'details' => ['order_id' => $order->id, 'status' => $order->status->value],
+            ], 422);
+        }
+
         $dto = CreatePaymentRequest::fromArray($validated);
-        $response = $this->adapter->createPayment($dto);
+        $response = $this->adapter->createPayment($dto, $order);
 
         return response()->json($response->toArray(), 201);
     }

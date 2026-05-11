@@ -8,6 +8,7 @@ use App\DTO\ConfirmPaymentRequest;
 use App\DTO\CreatePaymentRequest;
 use App\DTO\PaymentResponse;
 use App\Enums\ConfirmationFlow;
+use App\Models\Order;
 
 /**
  * PSP 抽象化レイヤ。
@@ -24,8 +25,10 @@ interface PaymentAdapterInterface
     /**
      * PaymentIntent を作成する。3DS2 challenge をなるべく経由するよう
      * 各 Adapter 実装側で `request_three_d_secure: 'any'` 相当を付与する。
+     *
+     * amount / currency は `$order` から導出する (client 側で改竄不能にする)。
      */
-    public function createPayment(CreatePaymentRequest $request): PaymentResponse;
+    public function createPayment(CreatePaymentRequest $request, Order $order): PaymentResponse;
 
     /**
      * PaymentIntent を confirm する。3DS2 challenge が必要な場合は

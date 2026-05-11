@@ -9,6 +9,7 @@ use App\DTO\CreatePaymentRequest;
 use App\DTO\PaymentResponse;
 use App\Enums\ConfirmationFlow;
 use App\Enums\PaymentStatus;
+use App\Models\Order;
 use App\Models\Transaction;
 use App\Support\IdGenerator;
 use DateTimeImmutable;
@@ -39,16 +40,16 @@ final class StripeAdapter implements PaymentAdapterInterface
         private readonly string $webhookSecret,
     ) {}
 
-    public function createPayment(CreatePaymentRequest $request): PaymentResponse
+    public function createPayment(CreatePaymentRequest $request, Order $order): PaymentResponse
     {
         $internalId = IdGenerator::transactionId();
 
-        // Stripe で PaymentIntent を作成。
+        // Stripe で PaymentIntent を作成。amount / currency は Order を真値とする。
         // request_three_d_secure: 'any' で frictionless / challenge 両経路で 3DS2 を経由させ、
         // 仕様学習デモとして 3DS2 challenge の挙動を観察できるようにする (EMVCo §6.x)。
         $intent = $this->stripe->paymentIntents->create([
-            'amount' => $request->amount,
-            'currency' => $request->currency,
+            'amount' => $order->amount,
+            'currency' => $order->currency,
             'payment_method_types' => ['card'],
             'payment_method_options' => [
                 'card' => [
@@ -57,17 +58,19 @@ final class StripeAdapter implements PaymentAdapterInterface
             ],
             'metadata' => [
                 'internal_transaction_id' => $internalId,
+                'internal_order_id' => $order->id,
             ],
         ]);
 
         $transaction = Transaction::create([
             'id' => $internalId,
+            'order_id' => $order->id,
             'psp' => 'stripe',
             'psp_payment_intent_id' => $intent->id,
             'client_secret' => $intent->client_secret,
             'status' => PaymentStatus::from($intent->status),
-            'amount' => $request->amount,
-            'currency' => $request->currency,
+            'amount' => $order->amount,
+            'currency' => $order->currency,
             'next_action' => $intent->next_action?->toArray(),
             'metadata' => $intent->metadata->toArray(),
         ]);
@@ -151,6 +154,7 @@ final class StripeAdapter implements PaymentAdapterInterface
     {
         return new PaymentResponse(
             id: $tx->id,
+            orderId: $tx->order_id,
             pspPaymentIntentId: $tx->psp_payment_intent_id,
             clientSecret: (string) $tx->client_secret,
             status: $tx->status,

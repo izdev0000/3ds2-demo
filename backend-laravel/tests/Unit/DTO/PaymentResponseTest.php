@@ -18,6 +18,7 @@ final class PaymentResponseTest extends TestCase
 
         $dto = new PaymentResponse(
             id: 'txn_01HYZ800',
+            orderId: 'ord_01HYZ800',
             pspPaymentIntentId: 'pi_3RT0',
             clientSecret: 'pi_3RT0_secret_xyz',
             status: PaymentStatus::REQUIRES_ACTION,
@@ -30,6 +31,7 @@ final class PaymentResponseTest extends TestCase
 
         $this->assertSame([
             'id' => 'txn_01HYZ800',
+            'order_id' => 'ord_01HYZ800',
             'psp_payment_intent_id' => 'pi_3RT0',
             'client_secret' => 'pi_3RT0_secret_xyz',
             'status' => 'requires_action',
@@ -45,6 +47,7 @@ final class PaymentResponseTest extends TestCase
     {
         $dto = new PaymentResponse(
             id: 'txn_01HYZ800',
+            orderId: 'ord_01HYZ800',
             pspPaymentIntentId: null,
             clientSecret: 'cs_xxx',
             status: PaymentStatus::SUCCEEDED,

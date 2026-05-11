@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Services;
 
+use App\Enums\OrderStatus;
 use App\Enums\PaymentStatus;
+use App\Models\Order;
 use App\Models\Transaction;
 use App\Services\StripeEventHandler;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -156,8 +158,21 @@ final class StripeEventHandlerTest extends TestCase
      */
     private function createTransaction(string $id, PaymentStatus $status, array $overrides = []): Transaction
     {
+        // Transaction の FK 制約上、Order を先に用意する。
+        $orderId = $overrides['order_id'] ?? 'ord_for_'.$id;
+        Order::query()->updateOrCreate(
+            ['id' => $orderId],
+            [
+                'status' => OrderStatus::PENDING,
+                'amount' => 1000,
+                'currency' => 'jpy',
+                'metadata' => null,
+            ],
+        );
+
         return Transaction::create(array_merge([
             'id' => $id,
+            'order_id' => $orderId,
             'psp' => 'stripe',
             'psp_payment_intent_id' => 'pi_'.$id,
             'client_secret' => 'cs_'.$id,
