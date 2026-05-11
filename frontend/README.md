@@ -95,8 +95,7 @@ docker compose exec frontend npm run build
 ## 関連 doc
 
 - [root README](../README.md) — セットアップ全体
-- [`../docs/architecture.md`](../docs/architecture.md) — 全体構造
-- [`../docs/payment-flow.md`](../docs/payment-flow.md) — frontend ↔ backend ↔ Stripe のフロー図
+- [`../docs/architecture.md`](../docs/architecture.md) — 全体構造 + 主要シーケンス図
 - [`../docs/design/confirmation-flow.md`](../docs/design/confirmation-flow.md) — client_sdk / server_redirect 設計
 - [`../docs/design/order-lifecycle.md`](../docs/design/order-lifecycle.md) — pending Order の内訳
 - [CLAUDE.md](../CLAUDE.md) — AI エージェント向け規約

@@ -138,8 +138,48 @@ stateDiagram-v2
 
 ## 4. 主要シーケンス
 
-frontend のデータフローの俯瞰は [`payment-flow.md`](./payment-flow.md) を参照。
-ここでは主に backend / Stripe / webhook の関係に焦点を当てる。
+3DS2 決済フローを 2 系統 (Client SDK / Server Redirect) と webhook 受信
+経路に分けて図示する。
+
+### 4.0 全体構成図
+
+```mermaid
+flowchart LR
+    User([User])
+    subgraph Frontend["Frontend - Vue 3"]
+        OrderUI["OrderForm.vue (① カート)"]
+        CardUI["PaymentCardSection.vue (② 決済)"]
+        Store["stores/payment.ts"]
+        StripeJS["StripePspClient.ts (via psp.ts)"]
+        Return["PaymentReturn.vue"]
+    end
+    subgraph Backend["Backend - Laravel 12"]
+        OrderCtrl["OrderController"]
+        PayCtrl["PaymentController"]
+        Adapter["StripeAdapter"]
+        Webhook["WebhookController"]
+        Handler["StripeEventHandler"]
+        DB[("orders / order_items /<br/>transactions / webhook_events")]
+    end
+    Stripe["Stripe API"]
+    Issuer["Issuer 3DS2"]
+
+    User --> OrderUI --> Store
+    User --> CardUI --> Store
+    Store -->|"POST /api/orders"| OrderCtrl
+    Store -->|"POST /api/payments {order_id}"| PayCtrl
+    Store -->|"POST /confirm"| PayCtrl
+    Store --> StripeJS
+    StripeJS -.->|"confirmCardPayment / handleNextAction"| Stripe
+    OrderCtrl --> DB
+    PayCtrl --> Adapter
+    Adapter -.->|"paymentIntents.create / confirm"| Stripe
+    Stripe -.->|"3DS2 challenge"| Issuer
+    Stripe -->|"webhook"| Webhook --> Handler --> DB
+    Adapter --> DB
+    Issuer -.->|"redirect return_url"| Return
+    Return -->|"GET /api/payments/{id} + /api/orders/{id}"| PayCtrl
+```
 
 ### 4.1 frictionless（3DS2 challenge 不要）
 
@@ -204,7 +244,60 @@ sequenceDiagram
     S-)L: webhook payment_intent.succeeded<br/>(Transaction + Order を同期)
 ```
 
-### 4.3 webhook idempotency
+### 4.3 server_redirect flow（full-page 3DS2、日本 PSP 風）
+
+国内 PSP に多い、issuer ページに画面遷移して認証を完結させる経路。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant FE as Frontend
+    participant SJS as Stripe.js
+    participant BE as Laravel API
+    participant SA as Stripe API
+    participant Iss as Issuer
+
+    User->>FE: ① カートイン → ② submit (server_redirect)
+    Note over FE,BE: 事前に POST /api/orders 済
+    FE->>BE: POST /api/payments {order_id}
+    BE->>SA: paymentIntents.create
+    SA-->>BE: {id, client_secret}
+    BE-->>FE: {id, order_id, client_secret}
+
+    FE->>SJS: createPaymentMethod(card)
+    SJS->>SA: tokenize card
+    SA-->>SJS: payment_method_id
+    SJS-->>FE: payment_method_id
+
+    FE->>FE: build return_url<br/>?txn={intentId} + sessionStorage
+    FE->>BE: POST /api/payments/{id}/confirm<br/>{payment_method_id, flow, return_url}
+    BE->>SA: paymentIntents.confirm<br/>(payment_method, return_url)
+    SA-->>BE: PI (next_action: redirect_to_url)
+    BE-->>FE: {status, next_action}
+
+    FE->>FE: phase = redirecting
+    FE->>User: navigate(next_action.redirect_to_url.url)
+    User->>Iss: 3DS2 challenge (full page)
+    Iss->>User: redirect → /payments/return?txn={id}
+
+    par 並行 (順序保証なし)
+        SA-->>BE: webhook payment_intent.succeeded
+        BE->>BE: update Transaction / Order
+    and
+        User->>FE: PaymentReturn.vue mount
+        FE->>FE: txn = query.txn ?? sessionStorage
+        FE->>BE: GET /api/payments/{txn}
+        BE-->>FE: {status, ...}
+    end
+
+    FE->>FE: ResultView
+```
+
+`?txn={id}` (Strategy C) + `sessionStorage` (Strategy B) を二重化することで、
+issuer が query を落とすケースに備える ([design/confirmation-flow.md §8.1](./design/confirmation-flow.md#81-paymentreturnvue-での内部-id-逆引き--実装済))。
+
+### 4.4 webhook idempotency
 
 ```mermaid
 sequenceDiagram
@@ -232,6 +325,41 @@ sequenceDiagram
 ```
 
 `psp_event_id` をユニークキーに使うことで、Stripe からの retry が来ても重複適用を防ぐ。
+
+### 4.5 frontend phase state machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> idle
+    idle --> preparing: submit()
+    preparing --> challenging: next_action (iframe)
+    preparing --> redirecting: next_action (redirect_to_url)
+    preparing --> succeeded: status=succeeded
+    preparing --> failed: error
+    challenging --> succeeded
+    challenging --> failed
+    redirecting --> [*]: browser leaves
+    [*] --> succeeded: PaymentReturn (GET /payments/{id})
+    [*] --> failed: PaymentReturn
+    succeeded --> idle: reset()
+    failed --> idle: reset()
+```
+
+### 4.6 設計ポイントと主要 file:line
+
+- **Client SDK flow**: Stripe.js が status を直接返すため、webhook と UI 確定が独立しても race にならない
+- **Server Redirect flow**: return から戻った時点で webhook が先着している保証がないため、`GET /api/payments/{id}` でサーバ側の最新状態を取りに行く
+- **業務確定 = Order.paid** は webhook のみで遷移する真値 (詳細は [design/error-handling.md §8.4](./design/error-handling.md#84-業務進行のトリガー) / [design/order-lifecycle.md](./design/order-lifecycle.md))
+
+主要実装ファイル:
+
+- [frontend/src/stores/payment.ts](../frontend/src/stores/payment.ts) — `start()`, `runClientSdkFlow()`, `runServerRedirectFlow()`
+- [frontend/src/services/StripePspClient.ts](../frontend/src/services/StripePspClient.ts) — `confirmCardPayment` + `handleNextAction`
+- [frontend/src/views/PaymentReturn.vue](../frontend/src/views/PaymentReturn.vue) — return URL ハンドラ
+- [backend-laravel/app/Http/Controllers/Api/PaymentController.php](../backend-laravel/app/Http/Controllers/Api/PaymentController.php) — create / confirm / show
+- [backend-laravel/app/Adapters/StripeAdapter.php](../backend-laravel/app/Adapters/StripeAdapter.php) — `paymentIntents.create` (`request_three_d_secure: 'any'`) / `paymentIntents.confirm`
+- [backend-laravel/app/Http/Controllers/Api/WebhookController.php](../backend-laravel/app/Http/Controllers/Api/WebhookController.php) — 署名検証 + idempotency
+- [backend-laravel/app/Services/StripeEventHandler.php](../backend-laravel/app/Services/StripeEventHandler.php) — Transaction + Order 状態同期
 
 ---
 
@@ -325,7 +453,9 @@ Stripe は webhook 配送失敗時に指数バックオフで retry し、同一
 
 ### 内部
 - [docs/api-contract.yaml](api-contract.yaml) — REST API 仕様（OpenAPI 3.x）
-- [docs/codegen-guide.md](codegen-guide.md) — contract から TS / PHP の型を生成する手順
+- [docs/design/error-handling.md](design/error-handling.md) — エラー方針 / webhook 真値遷移
+- [docs/design/order-lifecycle.md](design/order-lifecycle.md) — pending Order の内訳
+- [docs/design/confirmation-flow.md](design/confirmation-flow.md) — client_sdk / server_redirect の責務分担
 - [backend-laravel/app/Enums/PaymentStatus.php](../backend-laravel/app/Enums/PaymentStatus.php) — State enum 実装
 - [backend-laravel/app/Adapters/PaymentAdapterInterface.php](../backend-laravel/app/Adapters/PaymentAdapterInterface.php) — backend Adapter
 

@@ -72,12 +72,10 @@ frontend と backend は API contract（OpenAPI）で結合されており、bac
 
 ### 設計 doc
 
-- [`docs/architecture.md`](./docs/architecture.md) — 全体構造・データモデル・主要シーケンス
-- [`docs/payment-flow.md`](./docs/payment-flow.md) — frontend ↔ backend ↔ Stripe のフロー図
+- [`docs/architecture.md`](./docs/architecture.md) — 全体構造・データモデル・主要シーケンス (Client SDK / Server Redirect / webhook idempotency)
 - [`docs/design/confirmation-flow.md`](./docs/design/confirmation-flow.md) — client_sdk / server_redirect 設計
 - [`docs/design/error-handling.md`](./docs/design/error-handling.md) — エラー分類・retry・webhook 真値方針
 - [`docs/design/order-lifecycle.md`](./docs/design/order-lifecycle.md) — pending Order の内訳と UI 表示ポリシー
-- [`docs/codegen-guide.md`](./docs/codegen-guide.md) — OpenAPI から型生成する手順
 
 ## 環境構築
 
