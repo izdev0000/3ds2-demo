@@ -97,6 +97,14 @@ const busyMessage = computed(() => {
   gap: 1rem;
 }
 
+.payment-page h1 {
+  background: linear-gradient(90deg, #4f46e5, #06b6d4);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 700;
+}
+
 .phase {
   font-family: monospace;
   opacity: 0.7;

@@ -99,6 +99,14 @@ onMounted(async () => {
   gap: 1rem;
 }
 
+.payment-return h1 {
+  background: linear-gradient(90deg, #4f46e5, #06b6d4);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 700;
+}
+
 .result {
   padding: 1rem;
   border: 1px solid var(--color-border);
